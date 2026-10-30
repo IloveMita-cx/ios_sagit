@@ -29,6 +29,10 @@ jobs:
     # 构建链验证过的宿主是 Linux x86_64
     runs-on: ubuntu-24.04
     timeout-minutes: 350
+    defaults:
+      run:
+        # 关键：没有 pipefail 时 `cmd | tee` 会吞掉失败，步骤照样显示成功。
+        shell: bash -eo pipefail {0}
 
     steps:
       - uses: actions/checkout@v4
@@ -49,6 +53,16 @@ jobs:
       - name: Show disk after cleanup
         run: df -h /
 
+      # 缓存 7.35 GB 的 IPSW 与 bootstrap 下载的源码包，避免每轮重下
+      - name: Cache IPSW and bootstrap downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            firmware
+            tools/cache
+          key: sagit-deps-v1
+          restore-keys: sagit-deps-
+
       - name: Install host dependencies
         run: |
           set -x
@@ -62,7 +76,7 @@ jobs:
             libtinyxml2-dev libcapstone-dev \
             libfuse3-dev zlib1g-dev libfdt-dev uuid-dev \
             gcc-aarch64-linux-gnu iasl nasm \
-            xxd unzip zip rsync
+            gettext xxd unzip zip rsync
           # 可选包：Ubuntu 24.04 里不一定有，缺了只告警不中断
           for p in libkeystone-dev libssl-dev libbz2-dev liblzma-dev libzstd-dev libedit-dev; do
             sudo apt-get install -y --no-install-recommends "$p" || echo "::warning::optional package $p unavailable"
