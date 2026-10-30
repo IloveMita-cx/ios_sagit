@@ -75,7 +75,7 @@ jobs:
             flex bison m4 autoconf automake libtool patch perl \
             python3 python3-pip python3-venv \
             llvm clang lld llvm-dev \
-            libtinyxml2-dev libcapstone-dev \
+            libtinyxml2-dev \
             libdrm-dev libgbm-dev libx11-dev libxext-dev libxfixes-dev \
             libxcb1-dev libxrandr-dev libwayland-dev libexpat1-dev \
             libfuse3-dev zlib1g-dev libfdt-dev uuid-dev \
@@ -110,7 +110,8 @@ jobs:
           # 换成 23 会因 cctools 自带的旧 llvm-c 头而失败。
           # LLVM 23 只在 Build drivers 之前挂上去，见后面的步骤。
 
-      # kernelcache_patcher 依赖精确版本：capstone 5.0.9 + keystone 0.9（Ubuntu 自带版本不符）
+      # kernelcache_patcher 依赖精确版本：capstone 5.0.9 + keystone 0.9（Ubuntu 自带版本不符）。
+      # 关键：用静态库并移除系统 capstone 4.x，避免"5.0.9 头 + 4.x 库"的 ABI 错配导致段错误。
       - name: Build capstone 5.0.9 and keystone 0.9
         run: |
           set -eux
@@ -118,22 +119,25 @@ jobs:
           git clone --depth 1 --branch 5.0.9 https://github.com/capstone-engine/capstone.git
           cd capstone
           mkdir -p build && cd build
-          cmake -DCMAKE_BUILD_TYPE=Release ..
+          cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF ..
           make -j"$JOBS"
           sudo make install
-          sudo ldconfig
+          # 移除 Ubuntu 自带的 capstone 4.x，防止链接/加载到旧库
+          sudo apt-get remove -y libcapstone-dev libcapstone4 2>/dev/null || true
 
           cd /tmp
           git clone --depth 1 --branch 0.9 https://github.com/keystone-engine/keystone.git
           cd keystone
           mkdir -p build && cd build
-          cmake -DCMAKE_BUILD_TYPE=Release -DLLVM_TARGETS_TO_BUILD="AArch64;X86" ..
+          cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DLLVM_TARGETS_TO_BUILD="AArch64;X86" ..
           make -j"$JOBS"
           sudo make install
           sudo ldconfig
 
           ls -la /usr/local/lib/libcapstone* /usr/local/lib/libkeystone* \
                  /usr/local/include/capstone/capstone.h /usr/local/include/keystone/keystone.h
+          echo "LIBRARY_PATH=/usr/local/lib" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=/usr/local/lib" >> "$GITHUB_ENV"
 
       - name: Doctor
         run: make doctor 2>&1 | tee -a "$RUNNER_TEMP/doctor.log"
