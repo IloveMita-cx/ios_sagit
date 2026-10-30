@@ -110,19 +110,30 @@ jobs:
           # 换成 23 会因 cctools 自带的旧 llvm-c 头而失败。
           # LLVM 23 只在 Build drivers 之前挂上去，见后面的步骤。
 
-      # Keystone 汇编引擎：Ubuntu 没有官方包，kernelcache_patcher 需要，从源码编
-      - name: Build Keystone from source
+      # kernelcache_patcher 依赖精确版本：capstone 5.0.9 + keystone 0.9（Ubuntu 自带版本不符）
+      - name: Build capstone 5.0.9 and keystone 0.9
         run: |
           set -eux
           cd /tmp
-          git clone --depth 1 https://github.com/keystone-engine/keystone.git
+          git clone --depth 1 --branch 5.0.9 https://github.com/capstone-engine/capstone.git
+          cd capstone
+          mkdir -p build && cd build
+          cmake -DCMAKE_BUILD_TYPE=Release ..
+          make -j"$JOBS"
+          sudo make install
+          sudo ldconfig
+
+          cd /tmp
+          git clone --depth 1 --branch 0.9 https://github.com/keystone-engine/keystone.git
           cd keystone
           mkdir -p build && cd build
           cmake -DCMAKE_BUILD_TYPE=Release -DLLVM_TARGETS_TO_BUILD="AArch64;X86" ..
           make -j"$JOBS"
           sudo make install
           sudo ldconfig
-          ls -la /usr/local/lib/libkeystone* /usr/local/include/keystone/keystone.h
+
+          ls -la /usr/local/lib/libcapstone* /usr/local/lib/libkeystone* \
+                 /usr/local/include/capstone/capstone.h /usr/local/include/keystone/keystone.h
 
       - name: Doctor
         run: make doctor 2>&1 | tee -a "$RUNNER_TEMP/doctor.log"
