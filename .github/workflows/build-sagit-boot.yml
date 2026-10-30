@@ -134,6 +134,9 @@ jobs:
           sudo make install
           sudo ldconfig
 
+          # keystone Python 绑定：armv8_compat.py 的 ARMv8 ISA 降级需要
+          sudo pip3 install --break-system-packages keystone-engine
+          python3 -c 'import keystone; print("keystone py OK", keystone.__version__)'
           ls -la /usr/local/lib/libcapstone* /usr/local/lib/libkeystone* \
                  /usr/local/include/capstone/capstone.h /usr/local/include/keystone/keystone.h
           echo "LIBRARY_PATH=/usr/local/lib" >> "$GITHUB_ENV"
