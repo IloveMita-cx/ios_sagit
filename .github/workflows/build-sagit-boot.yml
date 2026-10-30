@@ -90,6 +90,19 @@ jobs:
           clang --version | head -1
           python3 --version
 
+      # GPU/AIR 导入强制要求 LLVM 23（Ubuntu 24.04 自带 18），需加官方源
+      - name: Install LLVM 23
+        run: |
+          set -eux
+          sudo apt-get install -y --no-install-recommends software-properties-common gnupg
+          curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/llvm.gpg
+          echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/noble/ llvm-toolchain-noble-23 main" | sudo tee /etc/apt/sources.list.d/llvm23.list
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends llvm-23 llvm-23-dev clang-23 lld-23
+          echo "/usr/lib/llvm-23/bin" >> "$GITHUB_PATH"
+          /usr/lib/llvm-23/bin/llvm-as --version
+          /usr/lib/llvm-23/bin/llvm-config --version
+
       - name: Doctor
         run: make doctor 2>&1 | tee -a "$RUNNER_TEMP/doctor.log"
 
