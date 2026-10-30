@@ -149,8 +149,14 @@ jobs:
           PY
           tools/prefix/libexec/ipsw/ipsw kernel dec \
             build/ios18-kext-analysis/kernelcache.release.ipad7c \
-            -o build/ios18-kext-analysis/kernelcache.release.ipad7c.macho
+            -o build/ios18-kext-analysis/kc_dir
+          # 新版 ipsw 把 -o 当目录用，真正的 Mach-O 在 kc_dir/ 下；
+          # 挪到工具链期望的文件路径。
+          mv build/ios18-kext-analysis/kc_dir/kernelcache.release.ipad7c.decompressed \
+             build/ios18-kext-analysis/kernelcache.release.ipad7c.macho
+          rm -rf build/ios18-kext-analysis/kc_dir
           ls -lh build/ios18-kext-analysis/
+          xxd -l 4 build/ios18-kext-analysis/kernelcache.release.ipad7c.macho
 
       # IPSW 用完后删掉，给后面的构建腾空间
       - name: Reclaim IPSW space
