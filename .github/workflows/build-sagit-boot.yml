@@ -53,15 +53,17 @@ jobs:
       - name: Show disk after cleanup
         run: df -h /
 
-      # 缓存 7.35 GB 的 IPSW 与 bootstrap 下载的源码包，避免每轮重下
-      - name: Cache IPSW and bootstrap downloads
+      # 缓存编好的工具链 + 源码包（bootstrap 的 ~6 分钟）。
+      # 不缓存 firmware/IPSW —— 从 Apple CDN 重下只要 ~1 分钟。
+      # 保存用末尾的 actions/cache/save（if: always()），
+      # 因为 actions/cache 的 post 保存只在 job 成功时执行，而构建失败很常见。
+      - name: Restore toolchain cache
         uses: actions/cache@v4
         with:
           path: |
-            firmware
             tools/cache
-          key: sagit-deps-v1
-          restore-keys: sagit-deps-
+            tools/prefix
+          key: sagit-toolchain-v1
 
       - name: Install host dependencies
         run: |
@@ -169,6 +171,12 @@ jobs:
           /usr/lib/llvm-23/bin/llvm-config --version
           /usr/lib/llvm-23/bin/llvm-as --version
 
+      # 苹果私有 clang 标志，上游 LLVM clang 不认识；换成等价的上游标志
+      - name: Patch Apple-only clang flag
+        run: |
+          sed -i 's/-fc++-static-destructors=none/-fno-c++-static-destructors/g' scripts/toolchain.py
+          grep -n 'static-destructors' scripts/toolchain.py
+
       - name: Build drivers
         run: make drivers JOBS=$JOBS 2>&1 | tee -a "$RUNNER_TEMP/drivers.log"
 
@@ -231,3 +239,13 @@ jobs:
           path: ${{ runner.temp }}/*.log
           if-no-files-found: ignore
           retention-days: 14
+
+      # 显式保存缓存；if: always() 保证即使前面失败也保存（只要产物完整）
+      - name: Save toolchain cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            tools/cache
+            tools/prefix
+          key: sagit-toolchain-v1
