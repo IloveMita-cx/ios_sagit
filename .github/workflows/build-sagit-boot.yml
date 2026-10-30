@@ -1,0 +1,180 @@
+name: build-sagit-boot
+
+# 在 GitHub 的 Linux runner 上构建小米 6 (sagit / msm8998) 的 iPadOS 18 引导镜像。
+# 产物: boot-sagit.img —— 可直接 fastboot boot，不写分区。
+#
+# 用法:
+#   1. Fork MC-XiaoXiao/ios_sagit
+#   2. 在 fork 里新建 .github/workflows/build-sagit-boot.yml，内容就是本文件
+#   3. Actions -> build-sagit-boot -> Run workflow
+#   4. 跑完在页面底部下载 artifact: boot-sagit
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/build-sagit-boot.yml"
+
+env:
+  IPSW_URL: "https://updates.cdn-apple.com/2026WinterFCS/fullrestores/140-97955/A3F72236-89AD-47C5-8394-5E824079C175/iPad_10.2_18.7.10_22H374_Restore.ipsw"
+  IPSW: "firmware/iPad_10.2_18.7.10_22H374_Restore.ipsw"
+  JOBS: "4"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    # 构建链验证过的宿主是 Linux x86_64
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # 免费 runner 只有约 14 GB 可用，而 IPSW 就 7.35 GB。
+      # 先删掉预装的 Android SDK / .NET / Haskell / Docker 镜像等，腾出约 30 GB。
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
+      - name: Show disk after cleanup
+        run: df -h /
+
+      - name: Install host dependencies
+        run: |
+          set -x
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build git curl ca-certificates \
+            flex bison m4 autoconf automake libtool patch perl \
+            python3 python3-pip python3-venv \
+            llvm clang lld libllvm-dev llvm-dev \
+            libtinyxml2-dev libcapstone-dev libkeystone-dev \
+            libfuse3-dev zlib1g-dev libfdt-dev uuid-dev \
+            gcc-aarch64-linux-gnu iasl nasm \
+            xxd unzip zip rsync
+          # EDK2 的 gcc 包装脚本写死了 /usr/bin/aarch64-none-linux-gnu-gcc，
+          # Ubuntu 的包名是 aarch64-linux-gnu-gcc，做个别名补上。
+          sudo ln -sf /usr/bin/aarch64-linux-gnu-gcc /usr/bin/aarch64-none-linux-gnu-gcc
+          # EDK2 的构建需要 uv
+          curl -LsSf https://astral.sh/uv/install.sh | sh || true
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          clang --version | head -1
+          python3 --version
+
+      - name: Doctor
+        run: make doctor 2>&1 | tee -a "$RUNNER_TEMP/doctor.log"
+
+      # 下载并校验 XNU 源码、iPhoneOS 18.6 SDK、cctools 等固定版本依赖
+      - name: Bootstrap toolchain
+        run: make bootstrap JOBS=$JOBS 2>&1 | tee -a "$RUNNER_TEMP/bootstrap.log"
+
+      - name: Collect XNU sources
+        run: make collect-sdm835 2>&1 | tee -a "$RUNNER_TEMP/collect.log"
+
+      - name: Download iPadOS 18.7.10 IPSW
+        run: |
+          set -eux
+          mkdir -p firmware
+          curl -fL --retry 3 --retry-delay 5 -o "$IPSW" "$IPSW_URL"
+          ls -lh "$IPSW"
+
+      - name: Prepare firmware from IPSW
+        run: |
+          set -eux
+          python3 scripts/build-apfs.py bootstrap
+          python3 scripts/build-apfs.py firmware "$IPSW"
+
+      # 取出 iPad 7 代的原生 kernelcache 并解成 Mach-O —— 驱动要以它为 ABI 基准
+      - name: Extract native kernelcache
+        run: |
+          set -eux
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+          import shutil
+          out = Path('build/ios18-kext-analysis'); out.mkdir(parents=True, exist_ok=True)
+          with ZipFile('firmware/iPad_10.2_18.7.10_22H374_Restore.ipsw') as a:
+              with a.open('kernelcache.release.ipad7c') as s, (out/'kernelcache.release.ipad7c').open('wb') as t:
+                  shutil.copyfileobj(s, t)
+          print('kernelcache extracted')
+          PY
+          tools/prefix/libexec/ipsw/ipsw kernel dec \
+            build/ios18-kext-analysis/kernelcache.release.ipad7c \
+            -o build/ios18-kext-analysis/kernelcache.release.ipad7c.macho
+          ls -lh build/ios18-kext-analysis/
+
+      # IPSW 用完后删掉，给后面的构建腾空间
+      - name: Reclaim IPSW space
+        run: |
+          rm -f "$IPSW"
+          df -h /
+
+      - name: Build XNU kernel
+        run: make build TARGET=SDM835 JOBS=$JOBS 2>&1 | tee -a "$RUNNER_TEMP/kernel.log"
+
+      - name: Verify kernel
+        run: make verify TARGET=SDM835
+
+      - name: Build drivers
+        run: make drivers JOBS=$JOBS 2>&1 | tee -a "$RUNNER_TEMP/drivers.log"
+
+      - name: Verify drivers
+        run: make verify-drivers
+
+      - name: Pack APFS kernel collection
+        run: make apfs-kernelcache JOBS=$JOBS 2>&1 | tee -a "$RUNNER_TEMP/kernelcache.log"
+
+      - name: Build APFS system + data image
+        run: |
+          python3 scripts/build-apfs.py image \
+            --initialize-persona \
+            --development-setup-complete 2>&1 | tee -a "$RUNNER_TEMP/apfs.log"
+
+      - name: Build XnuBridge.efi
+        run: |
+          python3 scripts/build-bridge.py \
+            --kernel build/output/kernelcache.sdm835.apfs \
+            --apfs-report build/apfs/ios.apfs.json \
+            --firmware-report build/apfs/prepared-firmware.json \
+            --ufs-handoff --full-memory --cpus 4 \
+            --development-unsealed-root --development-no-sep \
+            --development-legacy-data --development-hactivation \
+            --development-no-apple-pmgr --development-watchdog-policy \
+            --development-unthrottled-io --disable-system-sleep \
+            --output build/apfs/bridge 2>&1 | tee -a "$RUNNER_TEMP/bridge.log"
+
+      - name: Build EDK2 for sagit
+        run: make edk2-sagit 2>&1 | tee -a "$RUNNER_TEMP/edk2.log"
+
+      - name: Pack boot image
+        run: |
+          make boot-image BRIDGE_EFI=build/apfs/bridge/XnuBridge.efi 2>&1 | tee -a "$RUNNER_TEMP/bootimg.log"
+          ls -lh build/boot/
+
+      - name: Upload boot image
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: boot-sagit
+          path: build/boot/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: ${{ runner.temp }}/*.log
+          if-no-files-found: ignore
+          retention-days: 14
