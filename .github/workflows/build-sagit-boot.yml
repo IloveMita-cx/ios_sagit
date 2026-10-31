@@ -80,6 +80,7 @@ jobs:
             libxcb1-dev libxrandr-dev libwayland-dev libexpat1-dev \
             libfuse3-dev zlib1g-dev libfdt-dev uuid-dev \
             gcc-aarch64-linux-gnu iasl nasm \
+            device-tree-compiler pkg-config \
             gettext xxd unzip zip rsync
           # 可选包：Ubuntu 24.04 里不一定有，缺了只告警不中断
           for p in libkeystone-dev libssl-dev libbz2-dev liblzma-dev libzstd-dev libedit-dev; do
