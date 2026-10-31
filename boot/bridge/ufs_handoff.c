@@ -104,7 +104,8 @@ int bridge_ufs_prepare(EFI_BOOT_SERVICES *bs,void *apple_tree) {
     for(UINTN i=0;i<count;i++) {
         EFI_BLOCK_IO_PROTOCOL *b=0;
         if(EFI_ERROR(bs->HandleProtocol(handles[i],&bg,(void **)&b)) || !b || !b->Media || b->Media->LogicalPartition)continue;
-        if(b->Media->BlockSize!=4096 || b->Media->LastBlock!=13895679)continue;
+        // Accept both sagit UFS variants: 64 GB (13,895,679) and 128 GB (29,513,727).
+        if(b->Media->BlockSize!=4096 || (b->Media->LastBlock!=13895679 && b->Media->LastBlock!=29513727))continue;
         if(EFI_ERROR(b->FlushBlocks(b)) || EFI_ERROR(b->ReadBlocks(b,b->Media->MediaId,1,4096,area+16384)))continue;
         // Exact GPT disk identity, not merely a coincidentally matching capacity.
         const unsigned char id[]={0x32,0x1b,0x10,0x98,0xe2,0xbb,0xf2,0x4b,0xa0,0x6e,0x2b,0xb3,0x3d,0,0x0c,0x20};
