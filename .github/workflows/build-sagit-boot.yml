@@ -267,6 +267,21 @@ jobs:
             --initialize-persona \
             --development-setup-complete 2>&1 | tee -a "$RUNNER_TEMP/apfs.log"
 
+      # UMS 模式：让小米6 把 UFS 当 USB 移动硬盘暴露给 Linux 主机，用于刷 APFS
+      - name: Build USB storage exporter
+        run: make usb-storage 2>&1 | tee -a "$RUNNER_TEMP/usb-storage.log"
+
+      - name: Inspect APFS + UMS artifacts
+        run: |
+          echo "=== build/apfs ==="
+          ls -la build/apfs/
+          echo "=== build/usb-storage ==="
+          ls -la build/usb-storage/ 2>/dev/null || echo "(none)"
+          echo "=== ios.apfs.json ==="
+          cat build/apfs/ios.apfs.json 2>/dev/null || echo "(no report)"
+          echo "=== usb-storage build.json ==="
+          cat build/usb-storage/build.json 2>/dev/null || echo "(no report)"
+
       # EDK2 先跑：它克隆 edk2-msm8998 源码（提供 Uefi.h 等头文件），
       # 否则后面的 build-bridge.py 编 uefi.c 会找不到头文件。
       - name: Build EDK2 for sagit
@@ -301,6 +316,24 @@ jobs:
         with:
           name: boot-sagit
           path: build/boot/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload APFS report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apfs-report
+          path: build/apfs/ios.apfs.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload USB storage exporter
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: usb-storage
+          path: build/usb-storage/LinuxSimpleMassStorage.efi
           if-no-files-found: warn
           retention-days: 14
 
