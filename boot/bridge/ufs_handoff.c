@@ -128,10 +128,12 @@ int bridge_ufs_prepare(EFI_BOOT_SERVICES *bs,void *apple_tree) {
         if(!equal)continue;
         uint64_t table_lba;memcpy(&table_lba,area+16384+72,8);
         if(table_lba!=2 || EFI_ERROR(b->ReadBlocks(b,b->Media->MediaId,table_lba,4096,area+20480)))continue;
-        const unsigned char partition_id[]={0x4d,0xf0,0xa2,0x1a,0x40,0xe4,0x33,0x46,0xb4,0x55,0xce,0xb4,0x54,0xf3,0x43,0x1e};
+        // Standard Apple APFS partition type GUID (7C3457EF-0000-11AA-AA11-00306543ECAC)
+        // in GPT mixed-endian byte order, matched at the entry's type-GUID field (offset 0).
+        const unsigned char partition_id[]={0xef,0x57,0x34,0x7c,0x00,0x00,0xaa,0x11,0xaa,0x11,0x00,0x30,0x65,0x43,0xec,0xac};
         for(unsigned entry=0;entry<32;entry++) {
             unsigned char *p=area+20480+entry*128;
-            equal=1;for(unsigned j=0;j<16;j++)if(p[16+j]!=partition_id[j])equal=0;
+            equal=1;for(unsigned j=0;j<16;j++)if(p[0+j]!=partition_id[j])equal=0;
             if(equal) {memcpy(&apfs_lba,p+32,8);break;}
         }
         if(!apfs_lba)continue;
