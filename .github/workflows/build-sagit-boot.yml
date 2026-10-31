@@ -194,12 +194,6 @@ jobs:
           ls -lh build/ios18-kext-analysis/
           xxd -l 4 build/ios18-kext-analysis/kernelcache.release.ipad7c.macho
 
-      # IPSW 用完后删掉，给后面的构建腾空间
-      - name: Reclaim IPSW space
-        run: |
-          rm -f "$IPSW"
-          df -h /
-
       - name: Build XNU kernel
         run: make build TARGET=SDM835 JOBS=$JOBS 2>&1 | tee -a "$RUNNER_TEMP/kernel.log"
 
