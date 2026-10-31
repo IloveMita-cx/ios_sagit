@@ -277,6 +277,8 @@ jobs:
           cat build/collections/apfs-*/rootauth.patch 2>/dev/null || echo "(no patch)"
           echo "=== rootauth-panic log ==="
           cat build/collections/apfs-*/rootauth-panic.log 2>/dev/null || echo "(no log)"
+          echo "=== kernel strings (SSV/unsealed/776907) ==="
+          strings build/output/kernelcache.sdm835.apfs 2>/dev/null | grep -iE 'development-unsealed|unsealed APFS root|rootvp not authenticated|system-volume-auth|system-volume-until|776907|secure-boot-hashes' || echo "(none of those strings found)"
 
       - name: Build APFS system + data image
         run: |
