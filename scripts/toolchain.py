@@ -2332,7 +2332,16 @@ def pack_drivers(jobs, collection, output=None, base_manifest=None, local_kernel
         symbol_path.write_text(''.join(f'{address:x},{name}\n'
                                      for name, address in sorted(provider_symbols.items())))
         symbol_argument = '@' + str(symbol_path)
-    run([patcher, kernel, image, symbol_argument, stage, output], log=log)
+    # Release kernels enforce the sealed-system rootauth check unconditionally.
+    # Locate the "rootvp not authenticated" panic in the provider kernel and
+    # emit a patch list that NOPs it, so an unsealed APFS root keeps booting.
+    rootauth_patch = stage / 'rootauth.patch'
+    run([sys.executable, str(ROOT / 'scripts' / 'find-rootauth-panic.py'), str(image), str(rootauth_patch)],
+        log=stage / 'rootauth-panic.log', check=False)
+    patcher_args = [patcher, kernel, image, symbol_argument, stage, output]
+    if rootauth_patch.exists():
+        patcher_args.append(str(rootauth_patch))
+    run(patcher_args, log=log)
     report = json.loads(Path(str(output) + '.verification.json').read_text())
     if report.get('status') != 'passed' or report.get('kext_count') != len(order):
         raise RuntimeError('collection verifier did not confirm the expected bundle count')
