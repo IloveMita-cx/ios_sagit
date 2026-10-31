@@ -202,6 +202,14 @@ jobs:
           ls -lh build/ios18-kext-analysis/
           xxd -l 4 build/ios18-kext-analysis/kernelcache.release.ipad7c.macho
 
+      # 早期诊断：定位 "rootvp not authenticated" panic 地址。找不到就中断（省 20 分钟）。
+      - name: Test rootauth locator
+        run: |
+          python3 scripts/find-rootauth-panic.py \
+            build/ios18-kext-analysis/kernelcache.release.ipad7c.macho \
+            build/rootauth-test.patch
+          cat build/rootauth-test.patch 2>/dev/null || echo "(no patch)"
+
       - name: Build XNU kernel
         run: make build TARGET=SDM835 JOBS=$JOBS 2>&1 | tee -a "$RUNNER_TEMP/kernel.log"
 
