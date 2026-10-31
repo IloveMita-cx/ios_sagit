@@ -69,6 +69,15 @@ static int put32(const char *property,uint32_t value) {
     for(unsigned i=0;i<4;i++)p[i]=(unsigned char)(value>>(i*8));return 0;
 }
 static void be32(unsigned char *p,uint32_t v) {for(unsigned i=0;i<4;i++)p[i]=(unsigned char)(v>>(24-8*i));}
+static void hexc(uint64_t v) {
+    char b[20]; int n=0;
+    do { b[n++]="0123456789abcdef"[v&15]; v>>=4; } while(v);
+    b[n++]='x'; b[n++]='0';
+    char o[20]; int m=0;
+    while(n) o[m++]=b[--n];
+    o[m]=0;
+    bridge_puts(o);
+}
 static int resources(void) {
     // Retain the already-trained firmware link and its rails/NoC resources.
     // No regulator, RPM, interconnect or clock provider is allowed to power it off.
@@ -101,13 +110,15 @@ int bridge_ufs_prepare(EFI_BOOT_SERVICES *bs,void *apple_tree) {
     EFI_GUID bg=EFI_BLOCK_IO_PROTOCOL_GUID;EFI_HANDLE *handles=0;UINTN count=0;
     if(EFI_ERROR(bs->LocateHandleBuffer(ByProtocol,&bg,0,&count,&handles)))return -7;
     int found=0;
-    bridge_puts("[UFS handoff] BlockIO handles=");bridge_hex(count);bridge_puts("\n");
+    bridge_puts("[UFS] handles=");hexc(count);bridge_puts(" partitions-skipped\n");
     for(UINTN i=0;i<count;i++) {
         EFI_BLOCK_IO_PROTOCOL *b=0;
         if(EFI_ERROR(bs->HandleProtocol(handles[i],&bg,(void **)&b)) || !b || !b->Media)continue;
-        bridge_puts("[UFS handoff] dev");bridge_hex(i);bridge_puts(" block=");bridge_hex(b->Media->BlockSize);
-        bridge_puts(" last=");bridge_hex(b->Media->LastBlock);bridge_puts(" logical=");bridge_hex(b->Media->LogicalPartition);bridge_puts("\n");
         if(b->Media->LogicalPartition)continue;
+        bridge_puts("[UFS] WHOLE d=");hexc(i);
+        bridge_puts(" bs=");hexc(b->Media->BlockSize);
+        bridge_puts(" last=");hexc(b->Media->LastBlock);
+        bridge_puts("\n");
         // Accept both sagit UFS variants: 64 GB (13,895,679) and 128 GB (29,513,727).
         if(b->Media->BlockSize!=4096 || (b->Media->LastBlock!=13895679 && b->Media->LastBlock!=29513727))continue;
         if(EFI_ERROR(b->FlushBlocks(b)) || EFI_ERROR(b->ReadBlocks(b,b->Media->MediaId,1,4096,area+16384)))continue;
