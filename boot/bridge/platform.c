@@ -20,15 +20,6 @@ void bridge_hex(uint64_t n) {
     bridge_puts(s);
 }
 
-// Firmware framebuffer console mirror: the UART is not physically accessible
-// on sagit, so also echo every bridge_puts() line to the EDK2 text output.
-static void *con_out;
-static uint64_t (*con_out_print)(void *, const uint16_t *);
-void bridge_console_attach(void *proto, void *output) {
-    con_out = proto;
-    con_out_print = (uint64_t (*)(void *, const uint16_t *))output;
-}
-
 // The loader shares one console contract across ARM64 boards: firmware has
 // already configured clocks, pinmux and baud rate for the selected UART.
 static uint64_t uart_base;
