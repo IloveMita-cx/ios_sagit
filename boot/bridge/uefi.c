@@ -216,6 +216,8 @@ int bridge_gpu_takeover(void *, uint64_t, uint64_t);
 #endif
 EFI_STATUS EFIAPI efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE *st) {
     EFI_BOOT_SERVICES *bs = st->BootServices;
+    if (st->ConOut)
+        bridge_console_attach(st->ConOut, (void *)st->ConOut->OutputString);
     if (platform_console_init((void *)dt_blob))
         return EFI_UNSUPPORTED;
     struct kernel_info k;
