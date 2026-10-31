@@ -55,20 +55,20 @@ def configure_firmware_filesystems(tree, report_path, out, ipsw_tool):
             remove_handles(child)
     remove_handles(filesystems)
     tree['children'] = [n for n in tree['children'] if n['name'] != 'filesystems'] + [filesystems]
-    # Diagnostic: print each firmware volume's name/role/UUID so the on-device
-    # update-plan --add-volumes step can reuse the exact identities.
-    import uuid as _uuid
-    for vol in filesystems['children']:
-        props = vol['props']
-        raw = props.get('uuid') or props.get('UUID')
-        if raw and len(raw) == 16:
-            uid = str(_uuid.UUID(bytes=bytes(raw)))
-        elif raw:
-            uid = raw.rstrip(b'\0').decode('ascii', 'replace')
-        else:
-            uid = '(none)'
-        role = props.get('role', b'')
-        role = role.rstrip(b'\0').decode('ascii', 'replace') if isinstance(role, (bytes, bytearray)) else str(role)
-        print(f'[filesystems] volume name={vol["name"]} role={role} uuid={uid}')
+    # Diagnostic: dump the firmware /filesystems subtree so the on-device
+    # update-plan --add-volumes step can reuse the exact volume identities.
+    def show(node, indent=0):
+        for key, val in node['props'].items():
+            if key in ('name', 'uuid', 'UUID', 'role', 'fstab', 'value'):
+                try:
+                    s = val.rstrip(b'\0').decode('utf-8', 'replace') if isinstance(val, (bytes, bytearray)) else str(val)
+                except Exception:
+                    s = repr(val)
+                if len(s) > 300:
+                    s = s[:300] + '...'
+                print(f'[filesystems] {"  "*indent}{key}={s}')
+        for child in node['children']:
+            show(child, indent + 1)
+    show(filesystems)
     return {'zip_entry': component['Info']['Path'], 'sha256': hashlib.sha256(data).hexdigest(),
             'source': 'firmware filesystems subtree', 'tables': [n['name'] for n in filesystems['children']]}
