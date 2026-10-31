@@ -263,6 +263,13 @@ jobs:
       - name: Pack APFS kernel collection
         run: make apfs-kernelcache JOBS=$JOBS 2>&1 | tee -a "$RUNNER_TEMP/kernelcache.log"
 
+      - name: Show rootauth patch result
+        run: |
+          echo "=== rootauth patch ==="
+          cat build/collections/apfs-*/rootauth.patch 2>/dev/null || echo "(no patch)"
+          echo "=== rootauth-panic log ==="
+          cat build/collections/apfs-*/rootauth-panic.log 2>/dev/null || echo "(no log)"
+
       - name: Build APFS system + data image
         run: |
           python3 scripts/build-apfs.py image \
