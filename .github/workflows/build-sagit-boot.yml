@@ -167,6 +167,9 @@ jobs:
         run: |
           set -eux
           python3 scripts/build-apfs.py bootstrap
+          # build-bridge.py 期望 tools/prefix/bin/ipsw，但 ipsw 实际在 libexec/ipsw/，补软链接
+          mkdir -p tools/prefix/bin
+          ln -sf ../libexec/ipsw/ipsw tools/prefix/bin/ipsw
           python3 scripts/build-apfs.py firmware "$IPSW"
 
       # 取出 iPad 7 代的原生 kernelcache 并解成 Mach-O —— 驱动要以它为 ABI 基准
