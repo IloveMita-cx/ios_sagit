@@ -264,6 +264,11 @@ jobs:
             --initialize-persona \
             --development-setup-complete 2>&1 | tee -a "$RUNNER_TEMP/apfs.log"
 
+      # EDK2 先跑：它克隆 edk2-msm8998 源码（提供 Uefi.h 等头文件），
+      # 否则后面的 build-bridge.py 编 uefi.c 会找不到头文件。
+      - name: Build EDK2 for sagit
+        run: make edk2-sagit 2>&1 | tee -a "$RUNNER_TEMP/edk2.log"
+
       - name: Build XnuBridge.efi
         run: |
           python3 scripts/build-bridge.py \
@@ -276,9 +281,6 @@ jobs:
             --development-no-apple-pmgr --development-watchdog-policy \
             --development-unthrottled-io --disable-system-sleep \
             --output build/apfs/bridge 2>&1 | tee -a "$RUNNER_TEMP/bridge.log"
-
-      - name: Build EDK2 for sagit
-        run: make edk2-sagit 2>&1 | tee -a "$RUNNER_TEMP/edk2.log"
 
       - name: Pack boot image
         run: |
