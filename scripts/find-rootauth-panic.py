@@ -58,13 +58,21 @@ def parse_macho(data):
 
 
 def find_string(data, segments, needle):
+    # Search every section for the panic text; iOS kernelcaches may keep
+    # strings in __cstring, __const, or a merged literal pool.
     for _, _, _, sections in segments:
         for sectname, s_addr, s_size, s_off in sections:
-            if sectname in ('__cstring', '__const'):
-                idx = data[s_off:s_off + s_size].find(needle)
-                if idx >= 0:
-                    return s_addr + idx
-    return None
+            idx = data[s_off:s_off + s_size].find(needle)
+            if idx >= 0:
+                return s_addr + idx, sectname
+    return None, None
+
+
+def dump_sections(segments):
+    for _, _, _, sections in segments:
+        for sectname, s_addr, s_size, _ in sections:
+            if s_size:
+                print(f'  section {sectname}: addr=0x{s_addr:x} size=0x{s_size:x}', file=sys.stderr)
 
 
 def find_bl_after_adrp(data, segments, string_addr):
@@ -99,12 +107,13 @@ def main():
     kernel = Path(sys.argv[1])
     data = kernel.read_bytes()
     segments = parse_macho(data)
-    needle = b'rootvp not authenticated after mounting\0'
-    string_addr = find_string(data, segments, needle)
+    dump_sections(segments)
+    needle = b'rootvp not authenticated'
+    string_addr, sect = find_string(data, segments, needle)
     if string_addr is None:
         print('ERROR: string not found', file=sys.stderr)
         return 1
-    print(f'string @ 0x{string_addr:x}')
+    print(f'string @ 0x{string_addr:x} ({sect})')
     bl_addr = find_bl_after_adrp(data, segments, string_addr)
     if bl_addr is None:
         print('ERROR: panic BL not found', file=sys.stderr)
