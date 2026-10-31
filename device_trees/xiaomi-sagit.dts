@@ -34,7 +34,7 @@
         amfi-only-platform-code = <1>;
         dram-base = /bits/ 64 <0>;
         dram-size = /bits/ 64 <0>;
-        bootargs = "-v serial=3 debug=0x14a keepsyms=1 disable-uart-irq=1 mirror-console=1 cpus=4";
+        bootargs = "-v serial=3 debug=0x14e keepsyms=1 disable-uart-irq=1 mirror-console=1 cpus=4";
         firmware-version = "MI6 XNU bridge";
         // Filled from the firmware ChipInfo protocol before entering XNU.
         // IOPlatformExpert derives and publishes its native platform UUID.
