@@ -29,6 +29,8 @@ jobs:
     # 构建链验证过的宿主是 Linux x86_64
     runs-on: ubuntu-24.04
     timeout-minutes: 350
+    permissions:
+      contents: write
     defaults:
       run:
         # 关键：没有 pipefail 时 `cmd | tee` 会吞掉失败，步骤照样显示成功。
@@ -281,6 +283,32 @@ jobs:
           cat build/apfs/ios.apfs.json 2>/dev/null || echo "(no report)"
           echo "=== usb-storage build.json ==="
           cat build/usb-storage/build.json 2>/dev/null || echo "(no report)"
+
+      # ios.apfs 有 12.65 GB，压成 zstd 再切片，传成 GitHub Release 资产便于断点续传。
+      - name: Compress + split APFS image
+        run: |
+          set -eux
+          command -v zstd >/dev/null || sudo apt-get install -y zstd
+          cd build/apfs
+          zstd -T0 -12 ios.apfs -o ios.apfs.zst
+          ls -lh ios.apfs ios.apfs.zst
+          split -b 1900M -d ios.apfs.zst ios.apfs.zst.part
+          ls -lh ios.apfs.zst.part*
+
+      - name: Publish APFS chunks to release
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eux
+          cd build/apfs
+          TAG="apfs-run${{ github.run_number }}"
+          gh release delete "$TAG" --yes 2>/dev/null || true
+          gh release create "$TAG" --title "iPadOS APFS image (run ${{ github.run_number }})" \
+            --notes "ios.apfs.zst 切片。合并: cat ios.apfs.zst.part* > ios.apfs.zst; 解压: zstd -d ios.apfs.zst" \
+            || true
+          gh release upload "$TAG" ios.apfs.zst.part* --clobber || true
+          echo "release tag = $TAG"
 
       # EDK2 先跑：它克隆 edk2-msm8998 源码（提供 Uefi.h 等头文件），
       # 否则后面的 build-bridge.py 编 uefi.c 会找不到头文件。
