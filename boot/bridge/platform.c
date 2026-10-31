@@ -163,17 +163,6 @@ static void uart_write(unsigned int offset, uint32_t value) {
         *(volatile uint8_t *)p = value;
 }
 void bridge_puts(const char *s) {
-    if (con_out && con_out_print) {
-        uint16_t buf[512];
-        size_t j = 0;
-        for (size_t i = 0; s[i] && j < 510; i++) {
-            if (s[i] == '\n')
-                buf[j++] = '\r';
-            buf[j++] = (uint16_t)(unsigned char)s[i];
-        }
-        buf[j] = 0;
-        con_out_print(con_out, buf);
-    }
     while (*s) {
         if (*s == '\n')
             bridge_puts("\r");
