@@ -88,10 +88,10 @@ jobs:
           done
           # EDK2 用 CROSS_COMPILE=aarch64-none-linux-gnu-，但 Ubuntu 包前缀是
           # aarch64-linux-gnu-；把整套交叉工具都建别名（gcc/ar/ld/objcopy/... 都要）。
-          for t in gcc g++ cpp ar ld objcopy objdump nm ranlib strip readelf as strings; do
+          for t in gcc g++ cpp ar ld objcopy objdump nm ranlib strip readelf as strings gcc-ar gcc-nm gcc-ranlib; do
             sudo ln -sf "/usr/bin/aarch64-linux-gnu-$t" "/usr/bin/aarch64-none-linux-gnu-$t" 2>/dev/null || true
           done
-          ls -la /usr/bin/aarch64-none-linux-gnu-gcc /usr/bin/aarch64-none-linux-gnu-objcopy
+          ls -la /usr/bin/aarch64-none-linux-gnu-gcc /usr/bin/aarch64-none-linux-gnu-gcc-ar /usr/bin/aarch64-none-linux-gnu-objcopy
           # EDK2 的构建需要 uv
           curl -LsSf https://astral.sh/uv/install.sh | sh || true
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
