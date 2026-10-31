@@ -50,7 +50,6 @@ uint32_t platform_watchdog_read(unsigned int);
 void *dt_property(void *, const char *, const char *, uint32_t *);
 int bridge_set_platform_identity(void *, uint32_t, uint32_t);
 void bridge_puts(const char *);
-void bridge_console_attach(void *, void *);
 void bridge_hex(uint64_t);
 void bridge_enter(struct boot_args *, uint64_t) __attribute__((noreturn));
 extern const unsigned char kernel_blob[], kernel_end[], dt_blob[], dt_end[];
