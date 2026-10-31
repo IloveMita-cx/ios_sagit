@@ -79,16 +79,19 @@ jobs:
             libdrm-dev libgbm-dev libx11-dev libxext-dev libxfixes-dev \
             libxcb1-dev libxrandr-dev libwayland-dev libexpat1-dev \
             libfuse3-dev zlib1g-dev libfdt-dev uuid-dev \
-            gcc-aarch64-linux-gnu iasl nasm \
+            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu iasl nasm \
             device-tree-compiler pkg-config \
             gettext xxd unzip zip rsync
           # 可选包：Ubuntu 24.04 里不一定有，缺了只告警不中断
           for p in libkeystone-dev libssl-dev libbz2-dev liblzma-dev libzstd-dev libedit-dev; do
             sudo apt-get install -y --no-install-recommends "$p" || echo "::warning::optional package $p unavailable"
           done
-          # EDK2 的 gcc 包装脚本写死了 /usr/bin/aarch64-none-linux-gnu-gcc，
-          # Ubuntu 的包名是 aarch64-linux-gnu-gcc，做个别名补上。
-          sudo ln -sf /usr/bin/aarch64-linux-gnu-gcc /usr/bin/aarch64-none-linux-gnu-gcc
+          # EDK2 用 CROSS_COMPILE=aarch64-none-linux-gnu-，但 Ubuntu 包前缀是
+          # aarch64-linux-gnu-；把整套交叉工具都建别名（gcc/ar/ld/objcopy/... 都要）。
+          for t in gcc g++ cpp ar ld objcopy objdump nm ranlib strip readelf as strings; do
+            sudo ln -sf "/usr/bin/aarch64-linux-gnu-$t" "/usr/bin/aarch64-none-linux-gnu-$t" 2>/dev/null || true
+          done
+          ls -la /usr/bin/aarch64-none-linux-gnu-gcc /usr/bin/aarch64-none-linux-gnu-objcopy
           # EDK2 的构建需要 uv
           curl -LsSf https://astral.sh/uv/install.sh | sh || true
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
