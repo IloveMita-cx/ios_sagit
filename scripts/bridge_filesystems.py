@@ -57,9 +57,10 @@ def configure_firmware_filesystems(tree, report_path, out, ipsw_tool):
     tree['children'] = [n for n in tree['children'] if n['name'] != 'filesystems'] + [filesystems]
     # Diagnostic: dump the firmware /filesystems subtree so the on-device
     # update-plan --add-volumes step can reuse the exact volume identities.
+    import uuid as _uuid
     def show(node, indent=0):
         for key, val in node['props'].items():
-            if key in ('name', 'uuid', 'UUID', 'role', 'fstab', 'value'):
+            if key in ('name', 'role', 'fstab', 'value'):
                 try:
                     s = val.rstrip(b'\0').decode('utf-8', 'replace') if isinstance(val, (bytes, bytearray)) else str(val)
                 except Exception:
@@ -67,6 +68,10 @@ def configure_firmware_filesystems(tree, report_path, out, ipsw_tool):
                 if len(s) > 300:
                     s = s[:300] + '...'
                 print(f'[filesystems] {"  "*indent}{key}={s}')
+            elif len(val) == 16:
+                print(f'[filesystems] {"  "*indent}{key}=UUID({_uuid.UUID(bytes=bytes(val))})')
+            else:
+                print(f'[filesystems] {"  "*indent}{key}=<{len(val)} bytes> {val[:32].hex()}')
         for child in node['children']:
             show(child, indent + 1)
     show(filesystems)
