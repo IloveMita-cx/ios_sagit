@@ -101,9 +101,13 @@ int bridge_ufs_prepare(EFI_BOOT_SERVICES *bs,void *apple_tree) {
     EFI_GUID bg=EFI_BLOCK_IO_PROTOCOL_GUID;EFI_HANDLE *handles=0;UINTN count=0;
     if(EFI_ERROR(bs->LocateHandleBuffer(ByProtocol,&bg,0,&count,&handles)))return -7;
     int found=0;
+    bridge_puts("[UFS handoff] BlockIO handles=");bridge_hex(count);bridge_puts("\n");
     for(UINTN i=0;i<count;i++) {
         EFI_BLOCK_IO_PROTOCOL *b=0;
-        if(EFI_ERROR(bs->HandleProtocol(handles[i],&bg,(void **)&b)) || !b || !b->Media || b->Media->LogicalPartition)continue;
+        if(EFI_ERROR(bs->HandleProtocol(handles[i],&bg,(void **)&b)) || !b || !b->Media)continue;
+        bridge_puts("[UFS handoff] dev");bridge_hex(i);bridge_puts(" block=");bridge_hex(b->Media->BlockSize);
+        bridge_puts(" last=");bridge_hex(b->Media->LastBlock);bridge_puts(" logical=");bridge_hex(b->Media->LogicalPartition);bridge_puts("\n");
+        if(b->Media->LogicalPartition)continue;
         // Accept both sagit UFS variants: 64 GB (13,895,679) and 128 GB (29,513,727).
         if(b->Media->BlockSize!=4096 || (b->Media->LastBlock!=13895679 && b->Media->LastBlock!=29513727))continue;
         if(EFI_ERROR(b->FlushBlocks(b)) || EFI_ERROR(b->ReadBlocks(b,b->Media->MediaId,1,4096,area+16384)))continue;
