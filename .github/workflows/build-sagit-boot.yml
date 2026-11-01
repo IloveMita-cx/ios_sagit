@@ -371,6 +371,17 @@ jobs:
           make boot-image BRIDGE_EFI=build/apfs/bridge/XnuBridge.efi 2>&1 | tee -a "$RUNNER_TEMP/bootimg.log"
           ls -lh build/boot/
 
+      # 纯 EDK2 USB Fastboot 镜像（无 autoboot）：序列号 edk2-fastboot-1，
+      # USB 导出 UFS（usb-storage.py start）必须用这个，而不是进 XNU 的那个。
+      - name: Pack plain EDK2 USB fastboot image (no autoboot)
+        run: |
+          python3 scripts/build-boot.py \
+            --edk2 build/edk2-sagit/boot-sagit.img \
+            --no-autoboot \
+            --output build/boot/boot-sagit-edk2-usb.img 2>&1 | tee -a "$RUNNER_TEMP/bootimg-usb.log"
+          ls -lh build/boot/
+
+
       - name: Upload boot image
         if: always()
         uses: actions/upload-artifact@v4
