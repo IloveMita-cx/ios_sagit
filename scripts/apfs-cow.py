@@ -204,6 +204,7 @@ def plan_device(args):
         '--output',str(args.output.resolve())]
     if not repair:
         if getattr(args,'overlay',None) is not None: command += ['--overlay',str(args.overlay.resolve())]
+        if getattr(args,'preboot_overlay',None) is not None: command += ['--preboot-overlay',str(args.preboot_overlay.resolve())]
         if getattr(args,'development_setup_complete',False): command += ['--development-setup-complete']
         if system_only and args.file_block_patch is not None: command += ['--file-block-patch',str(args.file_block_patch.resolve())]
         if not system_only and not data_only:
@@ -303,6 +304,7 @@ def main():
     v=sub.add_parser('validate');v.add_argument('--delta',type=Path,required=True);v.add_argument('--output',type=Path,required=True)
     v.add_argument('--metadata-only',action='store_true',help='diagnostic metadata pass; omits compressed payload checks and cannot authorize apply')
     d=sub.add_parser('plan-device');d.add_argument('--device',type=Path,required=True);d.add_argument('--overlay',type=Path)
+    d.add_argument('--preboot-overlay',type=Path,help='files/symlinks/dirs to add into the existing Preboot volume')
     d.add_argument('--output',type=Path,required=True);d.add_argument('--disk-guid',required=True);d.add_argument('--partition-guid',required=True);d.add_argument('--sector-size',type=int)
     d.add_argument('--volume-group');d.add_argument('--add-volumes',type=Path);d.add_argument('--source-identity',type=Path)
     d.add_argument('--development-setup-complete',action='store_true',help='seed Setup completion preferences in Data')
