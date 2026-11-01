@@ -184,13 +184,21 @@ jobs:
           SYSOS=$(python3 -c "import json;d=json.load(open('build/apfs/prepared-firmware.json'));print(d['Cryptex1,SystemOS']['image'])")
           echo "Cryptex SystemOS image: $SYSOS"
           tools/prefix/libexec/ipsw/ipsw dyld extract "$SYSOS" -o build/dyld-diag 2>&1 | tail -40 || true
-          echo "=== extracted files ==="
-          find build/dyld-diag -maxdepth 3 -type f 2>/dev/null | head -60
-          echo "=== strings (CT policy / NRHF / adhoc / policy / root hash) ==="
+          echo "=== extracted files ===" | tee build/dyld-diag-strings.txt
+          find build/dyld-diag -maxdepth 3 -type f 2>/dev/null | head -60 | tee -a build/dyld-diag-strings.txt
+          echo "=== strings (CT policy / NRHF / adhoc / policy / root hash) ===" | tee -a build/dyld-diag-strings.txt
           for f in $(find build/dyld-diag -type f 2>/dev/null | head -8); do
-            echo "--- $f ---"
-            strings "$f" 2>/dev/null | grep -iE 'CT policy|NRHF|adhoc|root.hash|CTPolicy|unsuitable.*platform|code signature' | head -60
+            echo "--- $f ---" | tee -a build/dyld-diag-strings.txt
+            strings "$f" 2>/dev/null | grep -iE 'CT policy|NRHF|adhoc|root.hash|CTPolicy|unsuitable.*platform|code signature|personaliz|sealed|trust.?policy' | head -80 | tee -a build/dyld-diag-strings.txt
           done
+
+      - name: Upload dyld diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dyld-strings
+          path: build/dyld-diag-strings.txt
+          if-no-files-found: warn
 
       # 取出 iPad 7 代的原生 kernelcache 并解成 Mach-O —— 驱动要以它为 ABI 基准
       - name: Extract native kernelcache
