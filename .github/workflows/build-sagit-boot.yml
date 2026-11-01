@@ -213,6 +213,23 @@ jobs:
       - name: Build XNU kernel
         run: make build TARGET=SDM835 JOBS=$JOBS 2>&1 | tee -a "$RUNNER_TEMP/kernel.log"
 
+      # 生成 Preboot 卷的覆盖层（Cryptex 元数据 + root_hash/trustcache + dmg 链接）。
+      # 虚拟机里没有固件，所以在这里生成，作为 artifact 给设备端 apfs-cow.py 用。
+      - name: Prepare Preboot overlay
+        run: |
+          python3 scripts/prepare-preboot.py \
+            --firmware-report build/apfs/prepared-firmware.json \
+            --output build/ufs-mount/preboot 2>&1 | tee -a "$RUNNER_TEMP/preboot.log"
+          echo "=== overlay tree ==="
+          find build/ufs-mount/preboot -maxdepth 4 | head -40
+
+      - name: Upload Preboot overlay
+        uses: actions/upload-artifact@v4
+        with:
+          name: preboot-overlay
+          path: build/ufs-mount/preboot/
+          if-no-files-found: warn
+
       - name: Verify kernel
         run: make verify TARGET=SDM835
 
