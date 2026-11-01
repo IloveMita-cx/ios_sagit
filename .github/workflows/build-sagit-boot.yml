@@ -382,6 +382,7 @@ jobs:
             --firmware-report build/apfs/prepared-firmware.json \
             --ufs-handoff --development-unsealed-root --development-no-sep \
             --development-no-apple-pmgr --watchdog-seconds 31 \
+            --os-environment darwinos \
             --extra-boot-args "imageboot-attach=file:///usr/standalone/firmware/Cryptex1/SystemOS.dmg imageboot-mountpoint=/private/preboot/Cryptexes imageboot-fstype=apfs imageboot-parent-role=preboot imageboot-parent-mountpoint=/private/preboot imageboot-volume-uuid=4A77BA00-2826-44C4-B883-1FA92AC36880 vm-pagesize=16384" \
             --output build/apfs/bridge 2>&1 | tee -a "$RUNNER_TEMP/bridge.log"
 
