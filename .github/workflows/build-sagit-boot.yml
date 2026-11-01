@@ -339,9 +339,11 @@ jobs:
 
       - name: Build XnuBridge.efi
         run: |
+          # 用手机里已装 ios.apfs 的 UUID（584B947F-），而不是本轮新构建的随机 UUID，
+          # 否则 mountroot 会等一个不存在的卷 → "Failed to mount root device"。
           python3 scripts/build-bridge.py \
             --kernel build/output/kernelcache.sdm835.apfs \
-            --apfs-report build/apfs/ios.apfs.json \
+            --apfs-report ci-phone-apfs.json \
             --firmware-report build/apfs/prepared-firmware.json \
             --ufs-handoff --development-unsealed-root --development-no-sep \
             --development-no-apple-pmgr --watchdog-seconds 31 \
