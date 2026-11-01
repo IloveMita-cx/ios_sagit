@@ -207,6 +207,7 @@ func updatePlan(args []string) {
 	sourceOffset := flags.Int64("source-offset", 0, "container byte offset within a UAS device")
 	sourceSize := flags.Int64("source-size", 0, "container byte length; required for block devices")
 	overlay := flags.String("overlay", "", "System overlay directory")
+	prebootOverlay := flags.String("preboot-overlay", "", "Preboot overlay directory (symlinks, cryptex metadata, mount dirs)")
 	setupComplete := flags.Bool("development-setup-complete", false, "seed Setup Assistant completion preferences in Data for this development port")
 	group := flags.String("volume-group", "", "explicit System/Data group UUID; zero UUID removes macOS grouping")
 	addVolumes := flags.String("add-volumes", "", "JSON array of new volume names, roles, UUIDs and optional overlay directories")
@@ -255,6 +256,9 @@ func updatePlan(args []string) {
 		role := v.Superblock.Role
 		if role == apfs.VolumeRoleSystem && *overlay != "" {
 			addOverlay(root, *overlay, &stats)
+		}
+		if role == apfs.VolumeRolePreboot && *prebootOverlay != "" {
+			addOverlay(root, *prebootOverlay, &stats)
 		}
 		if role == apfs.VolumeRoleData && *setupComplete {
 			seedSetupCompletion(root, &stats)
