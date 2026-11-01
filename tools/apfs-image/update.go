@@ -238,6 +238,7 @@ func updatePlan(args []string) {
 		panic("COW update rejects Fusion and unknown container features")
 	}
 	start, oldFree := freeTail(c, reader)
+	fmt.Fprintf(os.Stderr, "COW free tail: highest_block=%d total_free_blocks=%d tail_blocks=%d tail_bytes=%d\n", start, oldFree, uint64(size)/4096-start, (uint64(size)/4096-start)*4096)
 	stats := stats{}
 	reuseInput = true
 	defer func() { reuseInput = false }()
