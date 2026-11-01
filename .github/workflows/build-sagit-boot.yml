@@ -180,17 +180,27 @@ jobs:
       # 反查闭源 dyld 里 "CT policy" / "NRHF" 校验附近的 boot arg（诊断，非致命）
       - name: Diagnose dyld CT-policy strings
         run: |
-          set -x
-          SYSOS=$(python3 -c "import json;d=json.load(open('build/apfs/prepared-firmware.json'));print(d['Cryptex1,SystemOS']['image'])")
-          echo "Cryptex SystemOS image: $SYSOS"
-          tools/prefix/libexec/ipsw/ipsw dyld extract "$SYSOS" -o build/dyld-diag 2>&1 | tail -40 || true
-          echo "=== extracted files ===" | tee build/dyld-diag-strings.txt
-          find build/dyld-diag -maxdepth 3 -type f 2>/dev/null | head -60 | tee -a build/dyld-diag-strings.txt
-          echo "=== strings (CT policy / NRHF / adhoc / policy / root hash) ===" | tee -a build/dyld-diag-strings.txt
+          set +e
+          {
+            echo "=== ipsw --help ==="
+            tools/prefix/libexec/ipsw/ipsw --help 2>&1 | head -80
+            echo "=== ipsw dyld --help ==="
+            tools/prefix/libexec/ipsw/ipsw dyld --help 2>&1 | head -80
+            echo "=== ipsw dmg --help ==="
+            tools/prefix/libexec/ipsw/ipsw dmg --help 2>&1 | head -80
+            SYSOS=$(python3 -c "import json;d=json.load(open('build/apfs/prepared-firmware.json'));print(d['Cryptex1,SystemOS']['image'])")
+            echo "Cryptex SystemOS image: $SYSOS"
+            echo "=== dyld extract attempt ==="
+            tools/prefix/libexec/ipsw/ipsw dyld extract "$SYSOS" -o build/dyld-diag 2>&1 | tail -40
+          } > build/dyld-diag-strings.txt 2>&1 || true
+          echo "=== extracted files ===" >> build/dyld-diag-strings.txt
+          find build/dyld-diag -maxdepth 3 -type f 2>/dev/null | head -60 >> build/dyld-diag-strings.txt
+          echo "=== strings ===" >> build/dyld-diag-strings.txt
           for f in $(find build/dyld-diag -type f 2>/dev/null | head -8); do
-            echo "--- $f ---" | tee -a build/dyld-diag-strings.txt
-            strings "$f" 2>/dev/null | grep -iE 'CT policy|NRHF|adhoc|root.hash|CTPolicy|unsuitable.*platform|code signature|personaliz|sealed|trust.?policy' | head -80 | tee -a build/dyld-diag-strings.txt
+            echo "--- $f ---" >> build/dyld-diag-strings.txt
+            strings "$f" 2>/dev/null | grep -iE 'CT policy|NRHF|adhoc|root.hash|CTPolicy|unsuitable.*platform|code signature|personaliz|sealed|trust.?policy' | head -80 >> build/dyld-diag-strings.txt
           done
+          echo "done"
 
       - name: Upload dyld diagnostic
         if: always()
