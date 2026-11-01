@@ -1,0 +1,44 @@
+{
+  "authenticated_root_preserved": false,
+  "container_bytes": 12654215168,
+  "container_uuid": "5C79238E-7665-4929-B5F6-8C3DBE2848BE",
+  "cryptex_images": {
+    "AppOS.dmg": {
+      "activation_verified": false,
+      "bytes": 16777216,
+      "sha256": "41172b47944cfa57a7d0545a719799ae6c1a7a87ec2583f2f9e49fad4ea03c78",
+      "source": "/home/runner/work/ios_sagit/ios_sagit/build/apfs/firmware/094-32850-038.dmg"
+    },
+    "SystemOS.dmg": {
+      "activation_verified": false,
+      "bytes": 3963617280,
+      "sha256": "617c55c3c1b27944a976ae1be22a88068a1e62a157610ddc13d8c8a849e16192",
+      "source": "/home/runner/work/ios_sagit/ios_sagit/build/apfs/firmware/094-33089-038.dmg"
+    }
+  },
+  "data_free_mib": 2048,
+  "data_uuid": "1E79F610-4D2F-4402-AF65-E997987B625F",
+  "development_setup_complete_requested": true,
+  "fstab": "UUID=584B947F-A081-4B6D-8B7A-58633B8AB724 / apfs ro 0 1\nUUID=1E79F610-4D2F-4402-AF65-E997987B625F /private/var apfs rw,nosuid,nodev 0 2\n",
+  "hardware_boot_verified": false,
+  "identity_report": "",
+  "image": "ios.apfs",
+  "image_sha256": "17bd60a4d7c18c7609e0ff075840da16161047f6a410bad8113fca6fcf6c67a6",
+  "initial_persona_requested": true,
+  "initial_persona_seeded": true,
+  "inventory": {
+    "allocated_payload_bytes": 11002462208,
+    "entries": 368466
+  },
+  "minimum_layout_mib": 10012,
+  "schema": 1,
+  "setup_completion_written": true,
+  "shared_free_bytes": 2148253696,
+  "source": "/home/runner/work/ios_sagit/ios_sagit/build/apfs/firmware/094-32804-038.dmg",
+  "source_sha256": "be43bec0cdde80a0153c2f80b26b7a4c429ef3eace828f318f81d051b813820c",
+  "source_volume_uuid": "B07DF049-7AD9-47B5-9F8F-9EE728056398",
+  "system_min_mib": 6528,
+  "system_overlay": "",
+  "system_uuid": "584B947F-A081-4B6D-8B7A-58633B8AB724",
+  "volume_group_uuid": "00000000-0000-0000-0000-000000000000"
+}
