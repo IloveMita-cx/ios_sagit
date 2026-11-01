@@ -380,6 +380,8 @@ jobs:
             --kernel build/output/kernelcache.sdm835.apfs \
             --apfs-report ci-phone-apfs.json \
             --firmware-report build/apfs/prepared-firmware.json \
+            --trust-cache build/ufs-mount/preboot/cryptex1/current/os.dmg.trustcache \
+            --trust-cache build/ufs-mount/preboot/cryptex1/current/app.dmg.trustcache \
             --ufs-handoff --development-unsealed-root --development-no-sep \
             --development-no-apple-pmgr --watchdog-seconds 31 \
             --os-environment darwinos \
