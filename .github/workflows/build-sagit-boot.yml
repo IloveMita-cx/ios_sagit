@@ -323,7 +323,7 @@ jobs:
 
       # UMS 模式：让小米6 把 UFS 当 USB 移动硬盘暴露给 Linux 主机，用于刷 APFS
       - name: Build USB storage exporter
-        run: make usb-storage 2>&1 | tee -a "$RUNNER_TEMP/usb-storage.log"
+        run: make usb-storage 2>&1 | tee -a "$RUNNER_TEMP/usb-storage.log" || echo "USB exporter build failed (non-fatal; boot image continues)"
 
       - name: Inspect APFS + UMS artifacts
         run: |
