@@ -177,6 +177,21 @@ jobs:
           ln -sf ../libexec/ipsw/ipsw tools/prefix/bin/ipsw
           python3 scripts/build-apfs.py firmware "$IPSW"
 
+      # 反查闭源 dyld 里 "CT policy" / "NRHF" 校验附近的 boot arg（诊断，非致命）
+      - name: Diagnose dyld CT-policy strings
+        run: |
+          set -x
+          SYSOS=$(python3 -c "import json;d=json.load(open('build/apfs/prepared-firmware.json'));print(d['Cryptex1,SystemOS']['image'])")
+          echo "Cryptex SystemOS image: $SYSOS"
+          tools/prefix/libexec/ipsw/ipsw dyld extract "$SYSOS" -o build/dyld-diag 2>&1 | tail -40 || true
+          echo "=== extracted files ==="
+          find build/dyld-diag -maxdepth 3 -type f 2>/dev/null | head -60
+          echo "=== strings (CT policy / NRHF / adhoc / policy / root hash) ==="
+          for f in $(find build/dyld-diag -type f 2>/dev/null | head -8); do
+            echo "--- $f ---"
+            strings "$f" 2>/dev/null | grep -iE 'CT policy|NRHF|adhoc|root.hash|CTPolicy|unsuitable.*platform|code signature' | head -60
+          done
+
       # 取出 iPad 7 代的原生 kernelcache 并解成 Mach-O —— 驱动要以它为 ABI 基准
       - name: Extract native kernelcache
         run: |
