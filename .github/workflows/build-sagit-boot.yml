@@ -303,6 +303,24 @@ jobs:
             --initialize-persona \
             --development-setup-complete 2>&1 | tee -a "$RUNNER_TEMP/apfs.log"
 
+      # 设备端 apfs-cow.py 需要的三个二进制（虚拟机里没有）。打包成 tgz 保留目录结构。
+      - name: Package apfs toolchain binaries
+        run: |
+          set -eux
+          mkdir -p build/apfs-tools/tree/build/apfs build/apfs-tools/tree/tools/src/apfsprogs/apfsck
+          cp build/apfs/apfs-image build/apfs-tools/tree/build/apfs/
+          cp build/apfs/apfs-cow-view build/apfs-tools/tree/build/apfs/
+          cp tools/src/apfsprogs/apfsck/apfsck build/apfs-tools/tree/tools/src/apfsprogs/apfsck/
+          ls -lh build/apfs-tools/tree/build/apfs/ build/apfs-tools/tree/tools/src/apfsprogs/apfsck/
+          tar -czf build/apfs-tools/apfs-tools.tgz -C build/apfs-tools/tree .
+
+      - name: Upload apfs toolchain binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: apfs-tools
+          path: build/apfs-tools/apfs-tools.tgz
+          if-no-files-found: warn
+
       # UMS 模式：让小米6 把 UFS 当 USB 移动硬盘暴露给 Linux 主机，用于刷 APFS
       - name: Build USB storage exporter
         run: make usb-storage 2>&1 | tee -a "$RUNNER_TEMP/usb-storage.log"
