@@ -421,7 +421,7 @@ jobs:
             --development-legacy-data \
             --development-no-apple-pmgr --development-watchdog-policy --watchdog-seconds 31 \
             --os-environment darwinos \
-            --extra-boot-args "imageboot-attach=file:///usr/standalone/firmware/Cryptex1/SystemOS.dmg imageboot-mountpoint=/private/preboot/Cryptexes imageboot-fstype=apfs imageboot-parent-role=preboot imageboot-parent-mountpoint=/private/preboot imageboot-volume-uuid=4A77BA00-2826-44C4-B883-1FA92AC36880 vm-pagesize=16384" \
+            --extra-boot-args "imageboot-attach=file:///usr/standalone/firmware/Cryptex1/SystemOS.dmg imageboot-mountpoint=/private/preboot/Cryptexes imageboot-fstype=apfs imageboot-parent-role=preboot imageboot-parent-mountpoint=/private/preboot imageboot-volume-uuid=4A77BA00-2826-44C4-B883-1FA92AC36880 vm-pagesize=16384 user-breakpoint-trace=1" \
             --output build/apfs/bridge 2>&1 | tee -a "$RUNNER_TEMP/bridge.log"
 
       - name: Pack boot image
