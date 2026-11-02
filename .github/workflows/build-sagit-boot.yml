@@ -417,7 +417,7 @@ jobs:
             --firmware-report build/apfs/prepared-firmware.json \
             --trust-cache build/ufs-mount/preboot/cryptex1/current/os.dmg.trustcache \
             --trust-cache build/ufs-mount/preboot/cryptex1/current/app.dmg.trustcache \
-            --ufs-handoff --development-unsealed-root --development-no-sep \
+            --ufs-handoff --full-memory --development-unsealed-root --development-no-sep \
             --development-legacy-data \
             --development-no-apple-pmgr --development-watchdog-policy --watchdog-seconds 31 \
             --os-environment darwinos \
