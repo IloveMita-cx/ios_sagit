@@ -360,9 +360,13 @@ func run() {
 			"uid": must(fe.OwnerIdentifier()), "gid": must(fe.GroupIdentifier())}
 		if m.IsRegular() {
 			stream := must(fe.RawDataStream())
-			data := make([]byte, stream.Size())
-			if _, err := stream.ReadAt(data, 0); err != nil {
-				panic(err)
+			dsize := int64(stream.Size())
+			fmt.Fprintf(os.Stderr, "data fork size=%d\n", dsize)
+			data := make([]byte, dsize)
+			if dsize > 0 {
+				if _, err := stream.ReadAt(data, 0); err != nil {
+					panic("data read: " + err.Error())
+				}
 			}
 			if err := os.WriteFile(filepath.Join(*extractOut, "data.bin"), data, 0644); err != nil {
 				panic(err)
@@ -374,9 +378,17 @@ func run() {
 			a := must(fe.ExtendedAttributeByIndex(i))
 			an := must(a.UTF8Name())
 			sz := must(a.Size())
+			fmt.Fprintf(os.Stderr, "xattr %s size=%d\n", an, sz)
 			buf := make([]byte, sz)
-			if _, err := a.ReadAt(buf, 0); err != nil {
-				panic(err)
+			if sz > 0 {
+				rs := must(a.RawDataStream())
+				if rs != nil {
+					if _, err := rs.ReadAt(buf, 0); err != nil {
+						panic("xattr stream read(" + an + "): " + err.Error())
+					}
+				} else if _, err := a.ReadAt(buf, 0); err != nil {
+					panic("xattr inline read(" + an + "): " + err.Error())
+				}
 			}
 			safe := strings.NewReplacer("/", "_", "\x00", "_", " ", "_").Replace(an)
 			if err := os.WriteFile(filepath.Join(*extractOut, "xattr_"+safe), buf, 0644); err != nil {
