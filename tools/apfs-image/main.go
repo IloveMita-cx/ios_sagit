@@ -394,6 +394,16 @@ func run() {
 			if err := os.WriteFile(filepath.Join(*extractOut, "xattr_"+safe), buf, 0644); err != nil {
 				panic(err)
 			}
+			if an == "com.apple.ResourceFork" {
+				rs2 := must(a.RawDataStream())
+				if rs2 != nil {
+					fmt.Fprintf(os.Stderr, "resource fork physical extents (block/bytes):\n")
+					for _, ex := range rs2.PhysicalExtents {
+						fmt.Fprintf(os.Stderr, "  phys_block=%d phys_bytes=%d logical_off=%d\n",
+							ex.PhysicalBlockNumber, ex.DataSize, ex.LogicalOffset)
+					}
+				}
+			}
 			xs = append(xs, an)
 		}
 		meta["xattrs"] = xs
