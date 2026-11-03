@@ -189,6 +189,24 @@ jobs:
           path: build/apfs/apfs-image
           if-no-files-found: warn
 
+      # 准备串口 Bash overlay（Bash 二进制 + LaunchDaemon + rc，不合并 launchd 缓存；
+      # 缓存合并在设备侧用 merge-launchd-bash.py 完成）
+      - name: Prepare serial Bash overlay
+        continue-on-error: true
+        run: |
+          set -eux
+          python3 scripts/prepare-serial-bash.py 2>&1 | tee -a "$RUNNER_TEMP/bash.log"
+          echo "=== overlay 内容 ==="
+          find build/ufs-mount/serial-shell/overlay -maxdepth 4 | head -80
+
+      - name: Upload Bash overlay
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bash-overlay
+          path: build/ufs-mount/serial-shell/overlay
+          if-no-files-found: warn
+
       # 提取 watchdogd 并打 PMU 补丁（handoff-86），非致命：CI 里 dmg 可能无法完整提取
       - name: Prepare watchdogd (handoff-86)
         run: |
