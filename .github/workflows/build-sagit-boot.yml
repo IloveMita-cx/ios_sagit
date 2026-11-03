@@ -177,6 +177,15 @@ jobs:
           ln -sf ../libexec/ipsw/ipsw tools/prefix/bin/ipsw
           python3 scripts/build-apfs.py firmware "$IPSW"
 
+      # 上传带 --extract-file 能力的 apfs-image（供设备侧导出 watchdogd）
+      - name: Upload apfs-image (extract-capable)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apfs-image
+          path: build/apfs/apfs-image
+          if-no-files-found: warn
+
       # 提取 watchdogd 并打 PMU 补丁（handoff-86），非致命：CI 里 dmg 可能无法完整提取
       - name: Prepare watchdogd (handoff-86)
         run: |
