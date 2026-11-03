@@ -420,7 +420,7 @@ jobs:
           # 用手机里已装 ios.apfs 的 UUID（584B947F-），而不是本轮新构建的随机 UUID，
           # 否则 mountroot 会等一个不存在的卷 → "Failed to mount root device"。
           WDT_TRUST=""
-          if [ -f build/apfs/watchdogd.patched ]; then WDT_TRUST="--trust-file build/apfs/watchdogd.patched"; fi
+          if [ -f ci/watchdogd.patched ]; then WDT_TRUST="--trust-file ci/watchdogd.patched"; fi
           echo "watchdogd trust flag: [$WDT_TRUST]"
           python3 scripts/build-bridge.py \
             --kernel build/output/kernelcache.sdm835.apfs \
