@@ -117,6 +117,27 @@ func copyEntry(fe *apfs.FileEntry, name string, s *stats, seen map[uint64]*apfsw
 	}
 	return e
 }
+func findPath(dir *apfs.FileEntry, parts []string) *apfs.FileEntry {
+	cur := dir
+	for _, p := range parts {
+		if p == "" {
+			continue
+		}
+		var next *apfs.FileEntry
+		for i, n := 0, must(cur.NumberOfSubFileEntries()); i < n; i++ {
+			c := must(cur.SubFileEntryByIndex(i))
+			if must(c.UTF8Name()) == p {
+				next = c
+				break
+			}
+		}
+		if next == nil {
+			return nil
+		}
+		cur = next
+	}
+	return cur
+}
 func child(e *apfswrite.Entry, name string) *apfswrite.Entry {
 	for _, c := range e.Children {
 		if c.Name == name {
@@ -309,6 +330,8 @@ func run() {
 	identity := flag.String("identity-report", "", "retain existing System/Data/container/group UUIDs when rebuilding")
 	initialPersona := flag.Bool("initialize-persona", false, "seed absent initial iOS 18 persona metadata on reconstructed unencrypted Data")
 	setupComplete := flag.Bool("development-setup-complete", false, "seed iOS Setup Assistant completion preferences in the Data volume for this development port")
+	extractFile := flag.String("extract-file", "", "extract one System file (with its xattrs) and exit")
+	extractOut := flag.String("extract-out", "", "output directory for --extract-file")
 	flag.Parse()
 	if *source == "" || *output == "" {
 		panic("--source and --output are required")
@@ -321,6 +344,51 @@ func run() {
 	defer c.Close()
 	v := must(c.VolumeBySelector("system"))
 	rootfe := must(v.RootDirectory())
+	if *extractFile != "" {
+		if *extractOut == "" {
+			panic("--extract-file requires --extract-out")
+		}
+		fe := findPath(rootfe, strings.Split(*extractFile, "/"))
+		if fe == nil {
+			panic("System file not found: " + *extractFile)
+		}
+		if err := os.MkdirAll(*extractOut, 0755); err != nil {
+			panic(err)
+		}
+		m := mode(must(fe.FileMode()))
+		meta := map[string]any{"path": *extractFile, "mode": m.String(),
+			"uid": must(fe.OwnerIdentifier()), "gid": must(fe.GroupIdentifier())}
+		if m.IsRegular() {
+			stream := must(fe.RawDataStream())
+			data := make([]byte, stream.Size())
+			if _, err := stream.ReadAt(data, 0); err != nil {
+				panic(err)
+			}
+			if err := os.WriteFile(filepath.Join(*extractOut, "data.bin"), data, 0644); err != nil {
+				panic(err)
+			}
+			meta["data_bytes"] = len(data)
+		}
+		xs := []string{}
+		for i, n := 0, must(fe.NumberOfExtendedAttributes()); i < n; i++ {
+			a := must(fe.ExtendedAttributeByIndex(i))
+			an := must(a.UTF8Name())
+			sz := must(a.Size())
+			buf := make([]byte, sz)
+			if _, err := a.ReadAt(buf, 0); err != nil {
+				panic(err)
+			}
+			safe := strings.NewReplacer("/", "_", "\x00", "_", " ", "_").Replace(an)
+			if err := os.WriteFile(filepath.Join(*extractOut, "xattr_"+safe), buf, 0644); err != nil {
+				panic(err)
+			}
+			xs = append(xs, an)
+		}
+		meta["xattrs"] = xs
+		mb, _ := json.MarshalIndent(meta, "", "  ")
+		fmt.Fprintf(os.Stderr, "extracted %s:\n%s\n", *extractFile, mb)
+		return
+	}
 	s := stats{}
 	root := copyEntry(rootfe, "", &s, map[uint64]*apfswrite.Entry{})
 	if *overlay != "" {
