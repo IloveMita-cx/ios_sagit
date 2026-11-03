@@ -278,6 +278,7 @@ jobs:
 
       # 只在此后让 LLVM 23 可见（AIR/GPU 导入要求 llvm-config 23 + llvm-as）
       - name: Select LLVM 23 for driver build
+        continue-on-error: true
         run: |
           echo "/usr/lib/llvm-23/bin" >> "$GITHUB_PATH"
           /usr/lib/llvm-23/bin/llvm-config --version
