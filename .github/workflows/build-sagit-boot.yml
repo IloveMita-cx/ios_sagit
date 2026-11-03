@@ -440,16 +440,17 @@ jobs:
         run: |
           # 用手机里已装 ios.apfs 的 UUID（584B947F-），而不是本轮新构建的随机 UUID，
           # 否则 mountroot 会等一个不存在的卷 → "Failed to mount root device"。
-          WDT_TRUST=""
-          if [ -f ci/watchdogd.patched ]; then WDT_TRUST="--trust-file ci/watchdogd.patched"; fi
-          echo "watchdogd trust flag: [$WDT_TRUST]"
+          TRUST_FLAGS=""
+          if [ -f ci/watchdogd.patched ]; then TRUST_FLAGS="$TRUST_FLAGS --trust-file ci/watchdogd.patched"; fi
+          if [ -f ci/launchd.plist.sig ]; then TRUST_FLAGS="$TRUST_FLAGS --trust-file ci/launchd.plist.sig"; fi
+          echo "trust flags: [$TRUST_FLAGS]"
           python3 scripts/build-bridge.py \
             --kernel build/output/kernelcache.sdm835.apfs \
             --apfs-report ci-phone-apfs.json \
             --firmware-report build/apfs/prepared-firmware.json \
             --trust-cache build/ufs-mount/preboot/cryptex1/current/os.dmg.trustcache \
             --trust-cache build/ufs-mount/preboot/cryptex1/current/app.dmg.trustcache \
-            $WDT_TRUST \
+            $TRUST_FLAGS \
             --ufs-handoff --full-memory --development-unsealed-root --development-no-sep \
             --development-legacy-data \
             --development-no-apple-pmgr --development-watchdog-policy --watchdog-seconds 31 \
