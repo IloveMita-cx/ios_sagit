@@ -102,6 +102,7 @@ jobs:
 
       # GPU/AIR 导入强制要求 LLVM 23（Ubuntu 24.04 自带 18），需加官方源
       - name: Install LLVM 23
+        continue-on-error: true
         run: |
           set -eux
           sudo apt-get install -y --no-install-recommends software-properties-common gnupg
