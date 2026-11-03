@@ -105,6 +105,8 @@ jobs:
         continue-on-error: true
         run: |
           set -eux
+          # GitHub runner 的 DNS 解析不了 apt.llvm.org（其他网络都能直连），硬编码 Fastly IP
+          echo "151.101.198.49 apt.llvm.org" | sudo tee -a /etc/hosts
           sudo apt-get install -y --no-install-recommends software-properties-common gnupg
           curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/llvm.gpg
           echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/noble/ llvm-toolchain-noble-23 main" | sudo tee /etc/apt/sources.list.d/llvm23.list
