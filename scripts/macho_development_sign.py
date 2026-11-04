@@ -92,7 +92,7 @@ def boolean_entitlement_blobs(entitlements, identifier=None):
 
 def signature_location(image, allow_bundle=False):
     if (len(image) < 32 or struct.unpack_from('<3I', image) != (0xfeedfacf, 0x100000c, 0) or
-            struct.unpack_from('<I', image, 12)[0] not in ((2, 8) if allow_bundle else (2,))):
+            struct.unpack_from('<I', image, 12)[0] not in ((2, 6, 8) if allow_bundle else (2, 6))):
         raise ValueError('expected thin arm64/ALL executable')
     count, size = struct.unpack_from('<II', image, 16)
     end = 32 + size; pos = 32; found = []; executable = []
