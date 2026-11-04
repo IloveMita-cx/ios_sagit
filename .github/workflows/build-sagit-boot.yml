@@ -443,6 +443,7 @@ jobs:
           TRUST_FLAGS=""
           if [ -f ci/watchdogd.patched ]; then TRUST_FLAGS="$TRUST_FLAGS --trust-file ci/watchdogd.patched"; fi
           if [ -f ci/launchd.plist.sig ]; then TRUST_FLAGS="$TRUST_FLAGS --trust-file ci/launchd.plist.sig"; fi
+          if [ -f ci/bash ]; then TRUST_FLAGS="$TRUST_FLAGS --trust-file ci/bash"; fi
           echo "trust flags: [$TRUST_FLAGS]"
           python3 scripts/build-bridge.py \
             --kernel build/output/kernelcache.sdm835.apfs \
