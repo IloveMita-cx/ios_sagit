@@ -32,5 +32,23 @@ func nativeSetupInputs(data *apfs.Volume) []nativeSystemInput {
 			path: prefix + entry.Name, payload: entry.Data, mode: 0600, uid: 501, gid: 501,
 		})
 	}
+	// Disable the Preboard services so they stop crash-looping during development boot.
+	inputs = append(inputs, nativeSystemInput{
+		path:    "db/com.apple.xpc.launchd/disabled.plist",
+		payload: []byte(launchdDisabledXML),
+		mode:    0644, uid: 0, gid: 0,
+	})
 	return inputs
 }
+
+const launchdDisabledXML = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>com.apple.preboardservice</key>
+	<true/>
+	<key>com.apple.preboardservice_v2</key>
+	<true/>
+</dict>
+</plist>
+`
