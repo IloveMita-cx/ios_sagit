@@ -21,6 +21,7 @@ func TestDataSetupPathCopyPreservesPreferencesAndOtherVolumes(t *testing.T) {
 	etc.Children = append(etc.Children, &apfswrite.Entry{Name: "fstab", Mode: 0644, Data: []byte("# preserved\n")})
 	data := &apfswrite.Entry{Mode: os.ModeDir | 0755}
 	prefs := dir(dir(dir(data, "mobile"), "Library"), "Preferences")
+	_ = dir(dir(data, "db"), "com.apple.xpc.launchd")
 	original := must(plist.Marshal(map[string]any{"preserved": "native", "SetupDone": false}, plist.BinaryFormat))
 	prefs.Children = append(prefs.Children, &apfswrite.Entry{
 		Name: "com.apple.purplebuddy.plist", Mode: 0644, ModeExplicit: true,
