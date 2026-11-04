@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 
 	"github.com/deploymenttheory/go-apfs-v2/pkg/apfs"
 )
@@ -50,7 +51,11 @@ func nativeSystemInputs(overlay string, descriptors []string) []nativeSystemInpu
 			repairCheck(st.Mode().IsRegular(), "System overlay requires regular files")
 			repairCheck(st.Size() > 0 && st.Size() <= 16<<20, "System overlay stream size unsupported")
 			rel := filepath.ToSlash(must(filepath.Rel(overlay, p)))
-			inputs = append(inputs, nativeSystemInput{path: rel, payload: must(os.ReadFile(p)), mode: st.Mode()})
+			var uid, gid uint32
+			if sys, ok := st.Sys().(*syscall.Stat_t); ok {
+				uid, gid = uint32(sys.Uid), uint32(sys.Gid)
+			}
+			inputs = append(inputs, nativeSystemInput{path: rel, payload: must(os.ReadFile(p)), mode: st.Mode(), uid: uid, gid: gid})
 			return nil
 		}))
 	}
