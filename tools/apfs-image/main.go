@@ -330,8 +330,10 @@ func run() {
 	identity := flag.String("identity-report", "", "retain existing System/Data/container/group UUIDs when rebuilding")
 	initialPersona := flag.Bool("initialize-persona", false, "seed absent initial iOS 18 persona metadata on reconstructed unencrypted Data")
 	setupComplete := flag.Bool("development-setup-complete", false, "seed iOS Setup Assistant completion preferences in the Data volume for this development port")
-	extractFile := flag.String("extract-file", "", "extract one System file (with its xattrs) and exit")
+	extractFile := flag.String("extract-file", "", "extract one file (with its xattrs) and exit")
 	extractOut := flag.String("extract-out", "", "output directory for --extract-file")
+	extractVolume := flag.String("extract-volume", "system", "volume for --extract-file (system or data)")
+	extractList := flag.String("extract-list", "", "list directory entries (volume-relative) and exit")
 	flag.Parse()
 	if *source == "" || *output == "" {
 		panic("--source and --output are required")
@@ -342,8 +344,19 @@ func run() {
 	}
 	defer closer.Close()
 	defer c.Close()
-	v := must(c.VolumeBySelector("system"))
+	v := must(c.VolumeBySelector(*extractVolume))
 	rootfe := must(v.RootDirectory())
+	if *extractList != "" {
+		fe := findPath(rootfe, strings.Split(*extractList, "/"))
+		if fe == nil || !mode(must(fe.FileMode())).IsDir() {
+			panic("directory not found: " + *extractList)
+		}
+		for i, n := 0, must(fe.NumberOfSubFileEntries()); i < n; i++ {
+			child := must(fe.SubFileEntryByIndex(i))
+			fmt.Printf("%s  %s  uid=%d gid=%d\n", mode(must(child.FileMode())).String(), must(child.UTF8Name()), must(child.OwnerIdentifier()), must(child.GroupIdentifier()))
+		}
+		return
+	}
 	if *extractFile != "" {
 		if *extractOut == "" {
 			panic("--extract-file requires --extract-out")
