@@ -46,9 +46,9 @@ const launchdDisabledXML = `<?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0">
 <dict>
 	<key>com.apple.preboardservice</key>
-	<true/>
+	<string>Programmatically disabled by root</string>
 	<key>com.apple.preboardservice_v2</key>
-	<true/>
+	<string>Programmatically disabled by root</string>
 </dict>
 </plist>
 `
