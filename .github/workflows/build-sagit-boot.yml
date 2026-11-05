@@ -350,7 +350,7 @@ jobs:
           ls -1 build/output/Extensions 2>/dev/null | head -60 || echo "(no Extensions dir)"
 
       - name: Pack display-runtime kernel collection
-        run: make kernelcache COLLECTION=display-runtime JOBS=$JOBS 2>&1 | tee -a "$RUNNER_TEMP/kernelcache.log"
+        run: python3 scripts/toolchain.py pack-drivers --target SDM835 -j $JOBS --collection display-runtime --kernelcache build/ios18-kext-analysis/kernelcache.release.ipad7c.macho 2>&1 | tee -a "$RUNNER_TEMP/kernelcache.log"
 
       - name: Show rootauth patch result
         run: |
