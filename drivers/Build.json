@@ -1583,7 +1583,6 @@
         "com.apple.security.AppleImage4",
         "com.apple.driver.AppleMobileFileIntegrity",
         "com.apple.security.sandbox",
-        "com.apple.driver.AppleSEPKeyStore",
         "org.mi6.driver.GenericARMPlatform",
         "org.mi6.driver.SDM835",
         "org.darwin.driver.AppleARMGIC",
