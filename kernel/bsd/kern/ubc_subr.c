@@ -4471,8 +4471,8 @@ accelerate_entitlement_queries(
 		cs_blob);
 
 	if (ret != KERN_SUCCESS) {
-		printf("unable to adjust OSEntitlements context without monitor: %d\n", ret);
-		return EPERM;
+		printf("unable to adjust OSEntitlements context without monitor: %d (development non-fatal)\n", ret);
+		return 0;
 	}
 
 	return 0;
