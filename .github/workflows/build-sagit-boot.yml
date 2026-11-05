@@ -453,7 +453,7 @@ jobs:
             --trust-cache build/ufs-mount/preboot/cryptex1/current/os.dmg.trustcache \
             --trust-cache build/ufs-mount/preboot/cryptex1/current/app.dmg.trustcache \
             $TRUST_FLAGS \
-            --ufs-handoff --display-handoff-profile tools/display-handoff.json --full-memory --development-unsealed-root --development-no-sep \
+            --ufs-handoff --display-handoff-profile tools/display-handoff.json --full-memory --arena-mib 1024 --disable-system-sleep --development-unsealed-root --development-no-sep \
             --development-legacy-data \
             --development-no-apple-pmgr --development-watchdog-policy --watchdog-seconds 31 \
             --os-environment darwinos \
