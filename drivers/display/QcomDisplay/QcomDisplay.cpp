@@ -181,16 +181,10 @@ bool QcomDisplay::start(IOService *provider) {
     }
     resourcesReady = true;
     nativeStarted = true;
-    for (const char *name : {"driver", "canvas-width", "canvas-height", "display-scale",
-                             "display-rotation", "display-width", "display-height"}) {
-        auto *value = provider->getProperty(name);
-        if (value) {
-            auto *data = OSDynamicCast(OSData, value);
-            IOLog("QcomDisplay: provider %s present len=%u\n", name, data ? data->getLength() : 0);
-        } else {
-            IOLog("QcomDisplay: provider %s MISSING\n", name);
-        }
-    }
+    IOLog("QcomDisplay: driver=%p canvasW=%p canvasH=%p scale=%p rot=%p\n",
+        provider->getProperty("driver"), provider->getProperty("canvas-width"),
+        provider->getProperty("canvas-height"), provider->getProperty("display-scale"),
+        provider->getProperty("display-rotation"));
     if (!super::start(provider)) {
         stopFramework(provider);
         releaseResources(); return false;
