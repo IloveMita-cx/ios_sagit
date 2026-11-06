@@ -349,8 +349,8 @@ jobs:
           echo "=== build/output/Extensions ==="
           ls -1 build/output/Extensions 2>/dev/null | head -60 || echo "(no Extensions dir)"
 
-      - name: Pack display-runtime kernel collection
-        run: python3 scripts/toolchain.py pack-drivers --target SDM835 -j $JOBS --collection display-runtime --kernelcache build/ios18-kext-analysis/kernelcache.release.ipad7c.macho 2>&1 | tee -a "$RUNNER_TEMP/kernelcache.log"
+      - name: Pack input-runtime kernel collection
+        run: python3 scripts/toolchain.py pack-drivers --target SDM835 -j $JOBS --collection input-runtime --kernelcache build/ios18-kext-analysis/kernelcache.release.ipad7c.macho 2>&1 | tee -a "$RUNNER_TEMP/kernelcache.log"
 
       - name: Show rootauth patch result
         run: |
@@ -447,7 +447,7 @@ jobs:
           for lib in ci/dylibs/*.dylib; do if [ -f "$lib" ]; then TRUST_FLAGS="$TRUST_FLAGS --trust-file $lib"; fi; done
           echo "trust flags: [$TRUST_FLAGS]"
           python3 scripts/build-bridge.py \
-            --kernel build/output/kernelcache.sdm835.display-runtime \
+            --kernel build/output/kernelcache.input-runtime \
             --apfs-report ci-phone-apfs.json \
             --firmware-report build/apfs/prepared-firmware.json \
             --trust-cache build/ufs-mount/preboot/cryptex1/current/os.dmg.trustcache \
