@@ -425,6 +425,7 @@ def configure_display_handoff(tree, path, smmu_handoff=False, disable_backlight=
     props['display-physical-width-mm'] = struct.pack('>I', width)
     props['display-physical-height-mm'] = struct.pack('>I', height)
     props['display-uuid'] = identifier.encode() + b'\0'
+    props['driver'] = b'com.apple.driver.IODisplay\0'
     backlight = None if disable_backlight else profile.get('backlight')
     if disable_backlight:
         props.pop('display-backlight', None)
