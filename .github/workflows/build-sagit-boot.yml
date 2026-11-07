@@ -265,6 +265,22 @@ jobs:
           ls -lh build/ios18-kext-analysis/
           xxd -l 4 build/ios18-kext-analysis/kernelcache.release.ipad7c.macho
 
+      # 逆向：定位 IODFB panic 字符串 + 反汇编它附近的 native start 检查
+      - name: Reverse IODFB panic site
+        run: |
+          set -eux
+          KC=build/ios18-kext-analysis/kernelcache.release.ipad7c.macho
+          python3 scripts/find-iodfb-panic.py "$KC" > build/iodfb-disasm.txt 2>&1 || true
+          echo "=== strings: IODFB / driver / Framebuffer ===" >> build/iodfb-disasm.txt
+          strings -a "$KC" | grep -iE 'IODFB|driver com|FramebufferLegacy|BootFramebuffer|canvas-width|canvas-height|display-subsystem' >> build/iodfb-disasm.txt || echo "(none)" >> build/iodfb-disasm.txt
+          cat build/iodfb-disasm.txt
+
+      - name: Upload IODFB disassembly
+        uses: actions/upload-artifact@v4
+        with:
+          name: iodfb-disasm
+          path: build/iodfb-disasm.txt
+
       # 早期诊断：定位 "rootvp not authenticated" panic 地址。找不到就中断（省 20 分钟）。
       - name: Test rootauth locator
         run: |
