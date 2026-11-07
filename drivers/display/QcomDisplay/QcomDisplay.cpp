@@ -181,11 +181,6 @@ bool QcomDisplay::start(IOService *provider) {
     }
     resourcesReady = true;
     nativeStarted = true;
-    provider->setProperty("driver", "com.apple.driver.IODisplay");
-    IOLog("QcomDisplay: driver=%p canvasW=%p canvasH=%p scale=%p rot=%p\n",
-        provider->getProperty("driver"), provider->getProperty("canvas-width"),
-        provider->getProperty("canvas-height"), provider->getProperty("display-scale"),
-        provider->getProperty("display-rotation"));
     if (!super::start(provider)) {
         stopFramework(provider);
         releaseResources(); return false;
