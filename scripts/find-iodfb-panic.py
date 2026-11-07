@@ -121,8 +121,8 @@ def main():
     kernel = Path(sys.argv[1])
     data = kernel.read_bytes()
     segments = parse_macho(data)
-    # try several needles; the panic is 'IODFB: driver com:' style
-    for needle in (b'IODFB', b'IOBootFramebuffer', b'BootFramebufferLegacy'):
+    # try several needles; the panic/log is 'IOMFB: driver commit: %s'
+    for needle in (b'IOMFB: driver commit', b'IOMobileFramebufferLegacy::start', b'IOMFB:'):
         addr, sect, fileoff = find_string(data, segments, needle)
         if addr is not None:
             print(f'FOUND "{needle.decode()}" @ 0x{addr:x} ({sect}) fileoff {fileoff}')
