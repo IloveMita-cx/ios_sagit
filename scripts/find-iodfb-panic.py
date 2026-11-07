@@ -131,19 +131,30 @@ def main():
     else:
         print('ERROR: none of IODFB/IOBootFramebuffer found', file=sys.stderr)
         return 1
-    # find ADRP referencing the string page
+    # find ADRP xN,page + ADD xN,xN,#lo12 that resolves to the EXACT string address
     string_page = addr & ~0xFFF
+    string_lo = addr & 0xFFF
     text = [(s_off, s_addr, s_size) for _,_,_,sections in segments for nm,s_addr,s_size,s_off in sections if nm in ('__text','__TEXT_EXEC','__text_exec')]
     xref = None
     for s_off, s_addr, s_size in text:
         for i in range(0, s_size - 3, 4):
             insn = u32(data, s_off + i)
-            if (insn & 0x9F000000) == 0x90000000:
-                immlo = (insn >> 29) & 0x3; immhi = (insn >> 5) & 0x7FFFF
-                imm = sign_extend((immhi << 2) | immlo, 21)
-                if ((s_addr + i) & ~0xFFF) + (imm << 12) == string_page:
-                    xref = (s_off, s_addr, s_size, i)
-                    break
+            if (insn & 0x9F000000) != 0x90000000:  # ADRP
+                continue
+            rd = insn & 0x1f
+            immlo = (insn >> 29) & 0x3; immhi = (insn >> 5) & 0x7FFFF
+            imm = sign_extend((immhi << 2) | immlo, 21)
+            if ((s_addr + i) & ~0xFFF) + (imm << 12) != string_page:
+                continue
+            # must be followed by ADD rd, rd, #string_lo (exact string)
+            for j in range(1, 8):
+                insn2 = u32(data, s_off + i + j*4)
+                if (insn2 & 0xFF800000) == 0x91000000 and (insn2 & 0x1f) == rd and ((insn2 >> 5) & 0x1f) == rd:
+                    add_imm = (insn2 >> 10) & 0xFFF
+                    if add_imm == string_lo:
+                        xref = (s_off, s_addr, s_size, i)
+                        break
+            if xref: break
         if xref: break
     if xref is None:
         print('ERROR: no ADRP xref to string page found', file=sys.stderr)
