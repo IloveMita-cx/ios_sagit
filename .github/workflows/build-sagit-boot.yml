@@ -349,8 +349,8 @@ jobs:
           echo "=== build/output/Extensions ==="
           ls -1 build/output/Extensions 2>/dev/null | head -60 || echo "(no Extensions dir)"
 
-      - name: Pack input-runtime kernel collection
-        run: python3 scripts/toolchain.py pack-drivers --target SDM835 -j $JOBS --collection input-runtime --kernelcache build/ios18-kext-analysis/kernelcache.release.ipad7c.macho 2>&1 | tee -a "$RUNNER_TEMP/kernelcache.log"
+      - name: Pack APFS kernel collection
+        run: make apfs-kernelcache JOBS=$JOBS 2>&1 | tee -a "$RUNNER_TEMP/kernelcache.log"
 
       - name: Show rootauth patch result
         run: |
@@ -447,13 +447,13 @@ jobs:
           for lib in ci/dylibs/*.dylib; do if [ -f "$lib" ]; then TRUST_FLAGS="$TRUST_FLAGS --trust-file $lib"; fi; done
           echo "trust flags: [$TRUST_FLAGS]"
           python3 scripts/build-bridge.py \
-            --kernel build/output/kernelcache.input-runtime \
+            --kernel build/output/kernelcache.sdm835.apfs \
             --apfs-report ci-phone-apfs.json \
             --firmware-report build/apfs/prepared-firmware.json \
             --trust-cache build/ufs-mount/preboot/cryptex1/current/os.dmg.trustcache \
             --trust-cache build/ufs-mount/preboot/cryptex1/current/app.dmg.trustcache \
             $TRUST_FLAGS \
-            --ufs-handoff --display-handoff-profile tools/display-handoff.json --full-memory --arena-mib 1024 --disable-system-sleep --development-unsealed-root --development-no-sep \
+            --ufs-handoff --full-memory --development-unsealed-root --development-no-sep \
             --development-legacy-data \
             --development-no-apple-pmgr --development-watchdog-policy --watchdog-seconds 31 \
             --os-environment darwinos \
