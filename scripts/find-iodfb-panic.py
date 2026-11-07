@@ -112,17 +112,17 @@ def disasm(insn, addr):
         return 'RET', True
     # STP/LDP (x29/x30 style)
     if (insn & 0xFFC00000) == 0xA9800000:
-        return 'STP x%d, x%d, [%s, #0x%x]' % (reg(0), reg(10), reg(5), ((insn>>15)&0x7f)<<3), False
+        return 'STP %s, %s, [%s, #0x%x]' % (reg(0), reg(10), reg(5), ((insn>>15)&0x7f)<<3), False
     if (insn & 0xFFC00000) == 0xA9400000:
-        return 'LDP x%d, x%d, [%s, #0x%x]' % (reg(0), reg(10), reg(5), ((insn>>15)&0x7f)<<3), False
+        return 'LDP %s, %s, [%s, #0x%x]' % (reg(0), reg(10), reg(5), ((insn>>15)&0x7f)<<3), False
     return 'insn 0x%08x' % insn, False
 
 def main():
     kernel = Path(sys.argv[1])
     data = kernel.read_bytes()
     segments = parse_macho(data)
-    # try several needles; the panic/log is 'IOMFB: driver commit: %s'
-    for needle in (b'IOMFB: driver commit', b'IOMobileFramebufferLegacy::start', b'IOMFB:'):
+    # try several needles; the panic is 'DISPLAY DRIVER FAILED TO LOAD'
+    for needle in (b'DRIVER FAILED TO LOAD', b'IOMFB: driver commit', b'IOMobileFramebufferLegacy::start'):
         addr, sect, fileoff = find_string(data, segments, needle)
         if addr is not None:
             print(f'FOUND "{needle.decode()}" @ 0x{addr:x} ({sect}) fileoff {fileoff}')
