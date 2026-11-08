@@ -146,10 +146,10 @@ def main():
             imm = sign_extend((immhi << 2) | immlo, 21)
             if ((s_addr + i) & ~0xFFF) + (imm << 12) != string_page:
                 continue
-            # must be followed by ADD rd, rd, #string_lo (exact string)
+            # must be followed by ADD r?, <adrp_rd>, #string_lo (exact string; the dest register may differ)
             for j in range(1, 8):
                 insn2 = u32(data, s_off + i + j*4)
-                if (insn2 & 0xFF800000) == 0x91000000 and (insn2 & 0x1f) == rd and ((insn2 >> 5) & 0x1f) == rd:
+                if (insn2 & 0xFF800000) == 0x91000000 and ((insn2 >> 5) & 0x1f) == rd:
                     add_imm = (insn2 >> 10) & 0xFFF
                     if add_imm == string_lo:
                         xref = (s_off, s_addr, s_size, i)
@@ -161,8 +161,8 @@ def main():
         return 1
     s_off, s_addr, s_size, i = xref
     print(f'ADRP xref @ 0x{s_addr+i:x}')
-    # dump 40 instructions before + 24 after
-    start = max(0, i - 40*4); end = min(s_size, i + 24*4)
+    # dump 48 instructions before + 80 after
+    start = max(0, i - 48*4); end = min(s_size, i + 80*4)
     for j in range(start, end, 4):
         insn = u32(data, s_off + j)
         txt, is_branch = disasm(insn, s_addr + j)
