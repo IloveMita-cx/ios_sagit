@@ -157,35 +157,40 @@ def main():
             if xref: break
         if xref: break
     if xref is None:
-        # fallback A: raw 64-bit pointer to the string (literal pool / pointer table)
-        needle_le = struct.pack('<Q', addr)
-        for _, _, _, sections in segments:
-            for nm, s_addr, s_size, s_off in sections:
-                if nm not in ('__text','__TEXT_EXEC','__text_exec','__const','__DATA_CONST','__data_const'):
-                    continue
-                pos = data.find(needle_le, s_off, s_off + s_size)
-                if pos >= 0:
-                    print(f'RAW POINTER xref: string 0x{addr:x} referenced by pointer at fileoff {pos} (section {nm}, vaddr 0x{s_addr + (pos - s_off):x})')
-                    # dump disassembly around that vaddr if it's in __text
-                    if nm in ('__text','__TEXT_EXEC','__text_exec'):
-                        base = s_addr + (pos - s_off)
-                        for j in range(base - 64, base + 64, 4):
-                            if j < s_addr or j + 3 >= s_addr + s_size: continue
-                            insn = u32(data, s_off + (j - s_addr))
-                            txt, _ = disasm(insn, j)
-                            print(f'0x{j:016x}: {insn:08x}  {txt}')
-                    return 0
-        print('ERROR: no xref found (ADRP+ADD or raw pointer)', file=sys.stderr)
+        print('ERROR: no xref found', file=sys.stderr)
         return 1
     s_off, s_addr, s_size, i = xref
     print(f'ADRP xref @ 0x{s_addr+i:x}')
-    # dump 48 instructions before + 80 after
-    start = max(0, i - 48*4); end = min(s_size, i + 80*4)
-    for j in range(start, end, 4):
-        insn = u32(data, s_off + j)
-        txt, is_branch = disasm(insn, s_addr + j)
-        mark = '   <== string ADRP' if j == i else ''
-        print(f'0x{s_addr+j:016x}: {insn:08x}  {txt}{mark}')
+    # find the panic wrapper start (scan back for the SUB sp prologue)
+    wrap = s_addr + i
+    for k in range(i, max(0, i - 16), -4):
+        insn = u32(data, s_off + k)
+        if (insn & 0xFFC003FF) == 0xD10003FF:  # SUB sp, sp, #imm
+            wrap = s_addr + k
+            break
+    print(f'panic wrapper start @ 0x{wrap:x}')
+    # find the caller: any BL to the wrapper
+    caller = None
+    for t_off, t_addr, t_size in text:
+        for j in range(0, t_size - 3, 4):
+            insn = u32(data, t_off + j)
+            if (insn & 0xFC000000) == 0x94000000:
+                imm = sign_extend(insn & 0x03FFFFFF, 26)
+                if (t_addr + j) + (imm << 2) == wrap:
+                    caller = (t_off, t_addr, t_size, j)
+                    break
+        if caller: break
+    if caller is None:
+        print('ERROR: no caller BL found', file=sys.stderr)
+        return 1
+    t_off, t_addr, t_size, j = caller
+    print(f'caller BL @ 0x{t_addr+j:x}')
+    start = max(0, j - 60*4); end = min(t_size, j + 20*4)
+    for m in range(start, end, 4):
+        insn = u32(data, t_off + m)
+        txt, _ = disasm(insn, t_addr + m)
+        mark = '   <== BL panic' if m == j else ''
+        print(f'0x{t_addr+m:016x}: {insn:08x}  {txt}{mark}')
     return 0
 
 if __name__ == '__main__':
