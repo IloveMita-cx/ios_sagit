@@ -265,14 +265,16 @@ jobs:
           ls -lh build/ios18-kext-analysis/
           xxd -l 4 build/ios18-kext-analysis/kernelcache.release.ipad7c.macho
 
-      # 逆向：定位 IODFB panic 字符串 + 反汇编它附近的 native start 检查
+      # 逆向：定位 IODFB panic 字符串 + llvm-objdump 反汇编整个 start 函数
       - name: Reverse IODFB panic site
         run: |
           set -eux
           KC=build/ios18-kext-analysis/kernelcache.release.ipad7c.macho
           python3 scripts/find-iodfb-panic.py "$KC" > build/iodfb-disasm.txt 2>&1 || true
-          echo "=== strings: IODFB / driver / Framebuffer ===" >> build/iodfb-disasm.txt
-          strings -a "$KC" | grep -iE 'IODFB|driver com|FramebufferLegacy|BootFramebuffer|canvas-width|canvas-height|display-subsystem' >> build/iodfb-disasm.txt || echo "(none)" >> build/iodfb-disasm.txt
+          echo "=== llvm-objdump IOMobileFramebufferLegacy::start (0xc1b900..0xc1c300) ===" >> build/iodfb-disasm.txt
+          llvm-objdump --macho --disassemble --start-address=0xfffffff005c1b900 --stop-address=0xfffffff005c1c300 "$KC" >> build/iodfb-disasm.txt 2>&1 || true
+          echo "=== strings (display driver / service names) ===" >> build/iodfb-disasm.txt
+          strings -a "$KC" | grep -iE 'IODisplay|AppleDisplay|display driver|findAndRetainService|driver commit|IOMFB:' >> build/iodfb-disasm.txt || echo "(none)" >> build/iodfb-disasm.txt
           cat build/iodfb-disasm.txt
 
       - name: Upload IODFB disassembly
