@@ -121,8 +121,8 @@ def main():
     kernel = Path(sys.argv[1])
     data = kernel.read_bytes()
     segments = parse_macho(data)
-    # try several needles; the panic is 'DISPLAY DRIVER FAILED TO LOAD'
-    for needle in (b'DRIVER FAILED TO LOAD', b'IOMFB: driver commit', b'IOMobileFramebufferLegacy::start'):
+    # try several needles; the panic string is '"DISPLAY DRIVER FAILED TO LOAD" @%s:%d' (leading quote)
+    for needle in (b'"DISPLAY DRIVER FAILED TO LOAD', b'DRIVER FAILED TO LOAD', b'IOMFB: driver commit'):
         addr, sect, fileoff = find_string(data, segments, needle)
         if addr is not None:
             print(f'FOUND "{needle.decode()}" @ 0x{addr:x} ({sect}) fileoff {fileoff}')
