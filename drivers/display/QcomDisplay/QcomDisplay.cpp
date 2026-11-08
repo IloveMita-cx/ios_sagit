@@ -1,4 +1,4 @@
-﻿/* SPDX-License-Identifier: BSD-2-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 #include "QcomDisplay.h"
 #include "QcomDisplayMapper.h"
 #include "DisplaySMMU.h"
@@ -1507,4 +1507,3 @@ void QcomDisplay::stop(IOService *provider) {
     releaseResources();
 }
 void QcomDisplay::free() { releaseResources(); super::free(); }
-
