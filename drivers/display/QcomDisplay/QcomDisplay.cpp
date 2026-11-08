@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: BSD-2-Clause */
+﻿/* SPDX-License-Identifier: BSD-2-Clause */
 #include "QcomDisplay.h"
 #include "QcomDisplayMapper.h"
 #include "DisplaySMMU.h"
@@ -149,7 +149,16 @@ IOReturn QcomDisplay::backlightRequest(DisplayBacklight::Operation operation, ui
     if (!backlight) return kIOReturnUnsupported;
     DisplayBacklight::Request request;
     request.operation = operation; request.identifier = backlightIdentifier; request.value = value;
+    const auto begin = mach_absolute_time();
     auto result = backlight->callPlatformFunction(DisplayBacklight::Function, true, &request, this, nullptr, nullptr);
+    const auto elapsed = mach_absolute_time() - begin;
+    ++backlightRequests; backlightRequestTicks += elapsed;
+    if (elapsed > backlightRequestPeakTicks) backlightRequestPeakTicks = elapsed;
+    setProperty("DisplayBacklightRequestCount", backlightRequests, 64);
+    setProperty("DisplayBacklightRequestTicks", backlightRequestTicks, 64);
+    setProperty("DisplayBacklightRequestPeakTicks", backlightRequestPeakTicks, 64);
+    if (operation == DisplayBacklight::Query && result == kIOReturnSuccess && !request.valid)
+        result = kIOReturnOffline;
     if (operation != DisplayBacklight::Release) {
         setProperty("BacklightStateValid", result == kIOReturnSuccess && request.valid);
         setProperty("BacklightLastError", uint32_t(result), 32);
@@ -316,6 +325,7 @@ void QcomDisplay::setDisplayVisible(bool enable) {
     setProperty("DisplayVisible", enable);
 }
 IOReturn QcomDisplay::do_power_state_change_gated() {
+    setProperty("DisplayPowerCallbackCount", ++powerCallbacks, 64);
     if (!resourcesReady || !scanoutMap || !interrupt || !timeout) return kIOReturnNotReady;
     if (nativeState<UInt8>(0x18a9) == 1) return kIOReturnSuccess; // Native ignore-power policy.
     UInt32 controller = nativeState<UInt32>(RequestedControllerPower);
@@ -339,16 +349,23 @@ IOReturn QcomDisplay::do_power_state_change_gated() {
         frontOffset = offset; // An aborted pre-sleep latch may have completed.
     }
     if (backlight) {
-        auto result = backlightRequest(DisplayBacklight::SetPower, on);
+        // Let the native compositor resume while the retained panel stays
+        // dark. Only a newly prepared, genuinely completed frame may expose
+        // its pixels; a pre-sleep frame or a stale PP_DONE cannot do so.
+        if (!on) wakeGate.power(false, displayVisible, 0);
+        const bool defer = on && !displayVisible;
+        auto result = backlightRequest(defer ? DisplayBacklight::Query : DisplayBacklight::SetPower, on);
         if (result != kIOReturnSuccess) {
             IOLog("QcomDisplay: backlight power transition failed controller=%u display=%u result=%x\n", controller, display, result);
             return result;
         }
-        setDisplayVisible(on);
+        if (defer) wakeGate.power(true, false, mach_continuous_time());
+        else setDisplayVisible(on);
+        setProperty("DisplayWakeFramePending", wakeGate.pending());
     }
-    // Commit native current states and notification only after hardware ACK
-    // and readback. The controller state describes software usability while
-    // its firmware resources stay retained. A disabled controller is dark.
+    // Native power acknowledges framebuffer usability, allowing fresh swaps.
+    // WLED visibility is separate (as with brightness zero): while waking it
+    // remains off until a fresh transfer completes. Off still requires PMIC ACK.
     UInt32 effectiveDisplay = on ? 1 : 0;
     if (nativeState<UInt32>(CurrentControllerPower) != controller ||
         nativeState<UInt32>(CurrentDisplayPower) != effectiveDisplay) {
@@ -412,7 +429,6 @@ IOReturn QcomDisplay::setProperties(OSObject *object) {
         return gate && gateAdded?gate->runAction(leaseHistoryAction):kIOReturnNotReady;
     }
     if(properties && properties->getObject("DisplayFrameStatistics")) {
-        if(!scanoutCaptureEnabled)return kIOReturnUnsupported;
         if(properties->getCount()!=1 || properties->getObject("DisplayFrameStatistics")!=kOSBooleanTrue)return kIOReturnBadArgument;
         if(IOUserClient::clientHasPrivilege(current_task(),kIOClientPrivilegeAdministrator)!=kIOReturnSuccess)return kIOReturnNotPrivileged;
         return gate && gateAdded?gate->runAction(swapStatisticsAction):kIOReturnNotReady;
@@ -1083,6 +1099,9 @@ void QcomDisplay::swap_begin_gated() {
         return;
     }
     nativeState<void *>(ActiveRequest) = request; // Transfer the detached queue reference.
+    UInt64 submittedAt;
+    memcpy(&submittedAt, bytes + RequestSubmittedTime, sizeof(submittedAt));
+    wakeGate.submitted(submittedAt);
     nativeRecordSwapState(request, 2);
     recordLease(Display::LeasePhase::Active,request);
     recordTimeline(Display::TimelineKind::Active,0,request);
@@ -1220,6 +1239,17 @@ void QcomDisplay::completeSwap(bool displayed) {
     }
     recordTimeline(Display::TimelineKind::ReadRetired,0,nativeState<void *>(ActiveRequest),displayed);
     finishScanout(displayed);
+    if (wakeGate.completed(displayed) && backlight &&
+            nativeState<UInt32>(RequestedControllerPower) == 1 &&
+            nativeState<UInt32>(RequestedDisplayPower) == 1) {
+        const auto result = backlightRequest(DisplayBacklight::SetPower, 1);
+        if (result == kIOReturnSuccess) {
+            wakeGate.lit();
+            setDisplayVisible(true);
+        }
+        setProperty("DisplayWakeFramePending", wakeGate.pending());
+        setProperty("DisplayPowerTransitionError", uint32_t(result), 32);
+    }
     recordTimeline(Display::TimelineKind::SurfaceRetired,0,nativeState<void *>(ActiveRequest),displayed);
     auto request = static_cast<const UInt8 *>(nativeState<void *>(ActiveRequest));
     bool trace = scanoutCaptureEnabled && takeDiagnostic(completionLogs);
@@ -1229,15 +1259,15 @@ void QcomDisplay::completeSwap(bool displayed) {
         memcpy(&kind, request + RequestIntent, sizeof(kind));
         memcpy(&state, request + 0x34c, sizeof(state));
     }
-    if(scanoutCaptureEnabled) {
-        if(displayed) {
-            ++displayedSwapCount;
-            const uint32_t at=(swapSampleHead+swapSampleCount)%Display::SwapSampleCapacity;
-            swapSamples[at]={mach_continuous_time(),sequence,uint32_t(displayVisible)|(frontSurface?2u:0u)};
-            if(swapSampleCount<Display::SwapSampleCapacity)++swapSampleCount;
-            else swapSampleHead=(swapSampleHead+1)%Display::SwapSampleCapacity;
-        } else ++failedSwapCount;
-    }
+    // Keep bounded completion statistics in normal operation too. Reading
+    // counters must not require pixel capture or change the IRQ event source.
+    if(displayed) {
+        ++displayedSwapCount;
+        const uint32_t at=(swapSampleHead+swapSampleCount)%Display::SwapSampleCapacity;
+        swapSamples[at]={mach_continuous_time(),sequence,uint32_t(displayVisible)|(frontSurface?2u:0u)};
+        if(swapSampleCount<Display::SwapSampleCapacity)++swapSampleCount;
+        else swapSampleHead=(swapSampleHead+1)%Display::SwapSampleCapacity;
+    } else ++failedSwapCount;
     if (trace) DISPLAY_NATIVE_LOG("QcomDisplay: native completion before id=%u kind=%u state=%u active=%u cancelled=%u displayed=%u completed=%u\n",
         sequence, kind, state, request != nullptr, request ? request[0x54a] : 0, displayed,
         nativeState<UInt32>(LastCompletedSwap));
@@ -1477,3 +1507,4 @@ void QcomDisplay::stop(IOService *provider) {
     releaseResources();
 }
 void QcomDisplay::free() { releaseResources(); super::free(); }
+
