@@ -157,7 +157,17 @@ def main():
             if xref: break
         if xref: break
     if xref is None:
-        print('ERROR: no ADRP xref to string page found', file=sys.stderr)
+        # fallback: dump a fixed wide window of the IOMobileFramebufferLegacy::start function
+        print('WARN: no exact ADRP+ADD xref; dumping fixed function window', file=sys.stderr)
+        for s_off, s_addr, s_size in text:
+            if s_addr <= 0xfffffff005c1c400 and s_addr + s_size >= 0xfffffff005c1ba00:
+                lo = 0xfffffff005c1ba00; hi = 0xfffffff005c1c400
+                i = lo - s_addr
+                for j in range(lo - s_addr, hi - s_addr, 4):
+                    insn = u32(data, s_off + j)
+                    txt, is_branch = disasm(insn, s_addr + j)
+                    print(f'0x{s_addr+j:016x}: {insn:08x}  {txt}')
+                return 0
         return 1
     s_off, s_addr, s_size, i = xref
     print(f'ADRP xref @ 0x{s_addr+i:x}')
