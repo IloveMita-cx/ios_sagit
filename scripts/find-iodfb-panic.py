@@ -163,9 +163,9 @@ def main():
     print(f'ADRP xref @ 0x{s_addr+i:x}')
     # find the panic wrapper start (scan back for the SUB sp prologue)
     wrap = s_addr + i
-    for k in range(i, max(0, i - 16), -4):
+    for k in range(i, max(0, i - 64), -4):
         insn = u32(data, s_off + k)
-        if (insn & 0xFFC003FF) == 0xD10003FF:  # SUB sp, sp, #imm
+        if (insn & 0xFF000000) == 0xD1000000:  # SUB immediate (prologue)
             wrap = s_addr + k
             break
     print(f'panic wrapper start @ 0x{wrap:x}')
