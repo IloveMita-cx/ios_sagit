@@ -1204,7 +1204,13 @@ void QcomDisplay::onVBL(const Display::VBLObservation &timing) {
     lastFrameTime = timing.time;
     nativeNotifyVBL(timing.count,timing.time,timing.delta);
     ++frames;
-    if (frames == 1) IOLog("QcomDisplay: first hardware %s interrupt\n", contract.commandMode() ? "TE/read-pointer" : "VBL");
+    if (frames == 1) {
+        IOLog("QcomDisplay: first hardware %s interrupt\n", contract.commandMode() ? "TE/read-pointer" : "VBL");
+        // The retained raster is already visible on the panel; light the
+        // backlight on the first real hardware interrupt instead of waiting
+        // for a fresh swap (console-only boot never submits a swap).
+        if (backlight) backlightRequest(DisplayBacklight::SetPower, 1);
+    }
     if (swapPending && !contract.commandMode()) {
         if (swapDisplayed && stagedExposed) {
             Display::Scanout<Registers> engine(regs, contract.source);
