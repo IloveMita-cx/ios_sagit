@@ -143,6 +143,8 @@ bool QcomDisplay::configureBacklight(IOService *p) {
     backlightClaimed = backlightRequest(DisplayBacklight::Claim) == kIOReturnSuccess;
     if (!backlightClaimed)
         IOLog("QcomDisplay: backlight claim failed identifier=%u; framebuffer not started\n", backlightIdentifier);
+    else
+        backlightRequest(DisplayBacklight::SetPower, 1); // always-on backlight for retained console raster
     return backlightClaimed;
 }
 IOReturn QcomDisplay::backlightRequest(DisplayBacklight::Operation operation, uint32_t value) {
@@ -1204,13 +1206,7 @@ void QcomDisplay::onVBL(const Display::VBLObservation &timing) {
     lastFrameTime = timing.time;
     nativeNotifyVBL(timing.count,timing.time,timing.delta);
     ++frames;
-    if (frames == 1) {
-        IOLog("QcomDisplay: first hardware %s interrupt\n", contract.commandMode() ? "TE/read-pointer" : "VBL");
-        // The retained raster is already visible on the panel; light the
-        // backlight on the first real hardware interrupt instead of waiting
-        // for a fresh swap (console-only boot never submits a swap).
-        if (backlight) backlightRequest(DisplayBacklight::SetPower, 1);
-    }
+    if (frames == 1) IOLog("QcomDisplay: first hardware %s interrupt\n", contract.commandMode() ? "TE/read-pointer" : "VBL");
     if (swapPending && !contract.commandMode()) {
         if (swapDisplayed && stagedExposed) {
             Display::Scanout<Registers> engine(regs, contract.source);
