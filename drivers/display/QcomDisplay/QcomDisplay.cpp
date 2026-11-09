@@ -143,8 +143,10 @@ bool QcomDisplay::configureBacklight(IOService *p) {
     backlightClaimed = backlightRequest(DisplayBacklight::Claim) == kIOReturnSuccess;
     if (!backlightClaimed)
         IOLog("QcomDisplay: backlight claim failed identifier=%u; framebuffer not started\n", backlightIdentifier);
-    else
-        backlightRequest(DisplayBacklight::SetPower, 1); // always-on backlight for retained console raster
+    else {
+        backlightRequest(DisplayBacklight::SetBrightness, 4095); // firmware-inherited level is 0 during boot
+        backlightRequest(DisplayBacklight::SetPower, 1);         // always-on backlight for retained console raster
+    }
     return backlightClaimed;
 }
 IOReturn QcomDisplay::backlightRequest(DisplayBacklight::Operation operation, uint32_t value) {
