@@ -490,7 +490,7 @@ jobs:
             --trust-cache build/ufs-mount/preboot/cryptex1/current/os.dmg.trustcache \
             --trust-cache build/ufs-mount/preboot/cryptex1/current/app.dmg.trustcache \
             $TRUST_FLAGS \
-            --ufs-handoff --development-unsealed-root --development-no-sep --development-legacy-data --watchdog-seconds 31 \
+            --ufs-handoff --development-unsealed-root --development-no-sep --development-legacy-data --development-no-apple-pmgr --development-watchdog-policy --watchdog-seconds 31 \
             --os-environment darwinos \
             --extra-boot-args "imageboot-attach=file:///usr/standalone/firmware/Cryptex1/SystemOS.dmg imageboot-mountpoint=/private/preboot/Cryptexes imageboot-fstype=apfs imageboot-parent-role=preboot imageboot-parent-mountpoint=/private/preboot imageboot-volume-uuid=4A77BA00-2826-44C4-B883-1FA92AC36880 vm-pagesize=16384 -wdt_no_pmu amfi_get_out_of_my_way=1 pmap_cs_allow_any_signature=1 cs_enforcement_disable=1" \
             --output build/apfs/bridge 2>&1 | tee -a "$RUNNER_TEMP/bridge.log"
