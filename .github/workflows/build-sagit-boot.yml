@@ -180,6 +180,30 @@ jobs:
           ln -sf ../libexec/ipsw/ipsw tools/prefix/bin/ipsw
           python3 scripts/build-apfs.py firmware "$IPSW"
 
+      # keybag 策略：无 SEP 时让 MKB/AKS 公共查询返回"已解锁"，Data 卷才能挂载（作者 README 627-634）
+      - name: Prepare keybag policy (no-SEP)
+        run: |
+          set -eux
+          SYSOS=$(python3 -c "import json;d=json.load(open('build/apfs/prepared-firmware.json'));print(d['components']['Cryptex1,SystemOS']['image'])")
+          echo "Cryptex SystemOS image: $SYSOS"
+          python3 scripts/toolchain.py prepare-keybag-policy \
+            --development-no-sep \
+            --system-cryptex "$SYSOS" \
+            --output build/display-runtime/keybag-common-policy/direct
+          echo "=== keybag policy artifacts ==="
+          ls -la build/display-runtime/keybag-common-policy/direct/
+
+      - name: Upload keybag policy artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: keybag-policy
+          path: |
+            build/display-runtime/keybag-common-policy/direct/trust-cache.bin
+            build/display-runtime/keybag-common-policy/direct/sealed-blocks.bin
+            build/display-runtime/keybag-common-policy/direct/manifest.json
+          if-no-files-found: warn
+
       # 上传带 --extract-file 能力的 apfs-image（供设备侧导出 watchdogd）
       - name: Upload apfs-image (extract-capable)
         if: always()
@@ -470,6 +494,7 @@ jobs:
             --firmware-report build/apfs/prepared-firmware.json \
             --trust-cache build/ufs-mount/preboot/cryptex1/current/os.dmg.trustcache \
             --trust-cache build/ufs-mount/preboot/cryptex1/current/app.dmg.trustcache \
+            --trust-cache build/display-runtime/keybag-common-policy/direct/trust-cache.bin \
             $TRUST_FLAGS \
             --ufs-handoff --display-handoff-profile tools/display-handoff.json --full-memory --arena-mib 1024 --disable-system-sleep --development-unsealed-root --development-no-sep \
             --development-legacy-data \
