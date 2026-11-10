@@ -39,6 +39,30 @@ def dump(data, base, out):
     out.write_text('\n'.join(lines) + '\n')
 
 
+# String addresses referenced by ADRP+ADD in the disassembly (assertion messages / file:line).
+STRING_ADDRS = [
+    0x2172A2000,   # ADRP x0 -> _bs_set_crash_log_message format
+    0x21732FEFE, 0x21732FECF, 0x21732F9B6, 0x2173300B4, 0x21732FF4E,
+    0x217329B31,
+]
+
+
+def cstring(cache, addr, maxlen=1024):
+    data = cache.read(addr, maxlen)
+    end = data.find(b'\0')
+    return data[:end if end >= 0 else maxlen].decode('utf8', 'replace')
+
+
+def dump_strings(cache, out):
+    lines = []
+    for addr in STRING_ADDRS:
+        try:
+            lines.append(f'{addr:#x}: {cstring(cache, addr)!r}')
+        except Exception as exc:  # noqa: BLE001
+            lines.append(f'{addr:#x}: <read failed: {exc}>')
+    (out / 'strings.txt').write_text('\n'.join(lines) + '\n')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', type=Path, default=ROOT / 'build/apfs/firmware/094-33089-038.dmg')
@@ -63,6 +87,7 @@ def main():
             dump(data, base + off, out / f'{name}.disasm.txt')
             report[name] = {'va': hex(base + off), 'bytes': size, 'sha256': digest(data).hex()}
         (out / 'manifest.json').write_text(json.dumps(report, indent=2) + '\n')
+        dump_strings(cache, out)
         print(json.dumps(report, indent=2))
     finally:
         image.close()
