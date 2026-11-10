@@ -1424,7 +1424,7 @@ bool QcomDisplay::publishDisplayProperties() {
 }
 
 void QcomDisplay::stop_hardware_gated() {
-    if (resourcesReady && backlightClaimed) backlightRequest(DisplayBacklight::SetPower, 0);
+    if (resourcesReady && backlightClaimed) { /* diagnostic: keep backlight on */ }
     displayVisible = false;
     resourcesReady = false;
     if (interrupt) interrupt->disable();
@@ -1469,7 +1469,7 @@ void QcomDisplay::releaseResources() {
     OSSafeReleaseNULL(scanoutMap); OSSafeReleaseNULL(scanoutMemory); OSSafeReleaseNULL(mdpMap);
     if (panelOpened) { panel->close(this); panelOpened = false; }
     OSSafeReleaseNULL(panel);
-    if (backlightClaimed) { backlightRequest(DisplayBacklight::Release); backlightClaimed = false; }
+    if (backlightClaimed) { /* diagnostic: keep backlight claimed/on */ }
     OSSafeReleaseNULL(backlight);
     if (opened) { getProvider()->close(this); opened = false; }
 }
