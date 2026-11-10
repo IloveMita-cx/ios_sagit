@@ -180,6 +180,25 @@ jobs:
           ln -sf ../libexec/ipsw/ipsw tools/prefix/bin/ipsw
           python3 scripts/build-apfs.py firmware "$IPSW"
 
+      # 逆向 PreBoard 背光 provider 断言（BLSHBacklightOSInterfaceProvider）
+      - name: Reverse backlight provider
+        run: |
+          python3 scripts/reverse-backlight.py \
+            --source build/apfs/firmware/094-33089-038.dmg \
+            --output build/backlight-reverse 2>&1 | tee -a "$RUNNER_TEMP/backlight.log"
+          echo "=== cold1 disasm ==="
+          cat build/backlight-reverse/cold1.disasm.txt 2>/dev/null | head -80
+          echo "=== initWithPlatformProvider disasm ==="
+          cat build/backlight-reverse/initWithPlatformProvider.disasm.txt 2>/dev/null | head -80
+
+      - name: Upload backlight reverse
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backlight-reverse
+          path: build/backlight-reverse/
+          if-no-files-found: warn
+
       # 上传带 --extract-file 能力的 apfs-image（供设备侧导出 watchdogd）
       - name: Upload apfs-image (extract-capable)
         if: always()
@@ -367,8 +386,8 @@ jobs:
           echo "=== build/output/Extensions ==="
           ls -1 build/output/Extensions 2>/dev/null | head -60 || echo "(no Extensions dir)"
 
-      - name: Pack display-runtime kernel collection
-        run: python3 scripts/toolchain.py pack-drivers --target SDM835 -j $JOBS --collection display-runtime --kernelcache build/ios18-kext-analysis/kernelcache.release.ipad7c.macho 2>&1 | tee -a "$RUNNER_TEMP/kernelcache.log"
+      - name: Pack apfs kernel collection (run 95 boot)
+        run: python3 scripts/toolchain.py pack-drivers --target SDM835 -j $JOBS --collection apfs --kernelcache build/ios18-kext-analysis/kernelcache.release.ipad7c.macho 2>&1 | tee -a "$RUNNER_TEMP/kernelcache.log"
 
       - name: Show rootauth patch result
         run: |
@@ -465,7 +484,7 @@ jobs:
           for lib in ci/dylibs/*.dylib; do if [ -f "$lib" ]; then TRUST_FLAGS="$TRUST_FLAGS --trust-file $lib"; fi; done
           echo "trust flags: [$TRUST_FLAGS]"
           python3 scripts/build-bridge.py \
-            --kernel build/output/kernelcache.sdm835.display-runtime \
+            --kernel build/output/kernelcache.sdm835.apfs \
             --apfs-report ci-phone-apfs.json \
             --firmware-report build/apfs/prepared-firmware.json \
             --trust-cache build/ufs-mount/preboot/cryptex1/current/os.dmg.trustcache \
