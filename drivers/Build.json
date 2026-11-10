@@ -1582,6 +1582,7 @@
         "com.apple.kec.pthread",
         "com.apple.security.AppleImage4",
         "com.apple.driver.AppleMobileFileIntegrity",
+        "com.apple.driver.AppleSEPKeyStore",
         "com.apple.security.sandbox",
         "org.mi6.driver.GenericARMPlatform",
         "org.mi6.driver.SDM835",
