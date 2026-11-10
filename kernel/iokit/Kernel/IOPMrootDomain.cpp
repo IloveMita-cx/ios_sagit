@@ -1420,7 +1420,8 @@ static int
 sysctl_aotmetrics SYSCTL_HANDLER_ARGS
 {
 	if (NULL == gRootDomain) {
-		return ENOENT;
+		uint32_t default_mode = 0;
+		return sysctl_io_number(req, default_mode, sizeof(uint32_t), &new_value, &changed);
 	}
 	if (NULL == gRootDomain->_aotMetrics) {
 		IOPMAOTMetrics nullMetrics = {};
@@ -1465,7 +1466,8 @@ sysctl_aotmodebits
 	uint32_t new_value;
 
 	if (NULL == gRootDomain) {
-		return ENOENT;
+		uint32_t default_mode = 0;
+		return sysctl_io_number(req, default_mode, sizeof(uint32_t), &new_value, &changed);
 	}
 	error = sysctl_io_number(req, gRootDomain->_aotMode, sizeof(uint32_t), &new_value, &changed);
 	if (changed && gIOPMWorkLoop) {
@@ -1487,7 +1489,8 @@ sysctl_aotmode
 	uint32_t new_value;
 
 	if (NULL == gRootDomain) {
-		return ENOENT;
+		uint32_t default_mode = 0;
+		return sysctl_io_number(req, default_mode, sizeof(uint32_t), &new_value, &changed);
 	}
 	error = sysctl_io_number(req, gRootDomain->_aotMode, sizeof(uint32_t), &new_value, &changed);
 	if (changed && gIOPMWorkLoop) {
