@@ -543,7 +543,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-logs
-          path: ${{ runner.temp }}/*.log
+          path: |
+            ${{ runner.temp }}/*.log
+            build/drivers/obj/**/*.vtable.txt
           if-no-files-found: ignore
           retention-days: 14
 
