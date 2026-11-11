@@ -126,28 +126,13 @@ bool QcomDisplay::configure(IOService *p) {
 }
 
 bool QcomDisplay::configureBacklight(IOService *p) {
+    // Development fake-backlight policy: the panel backlight keeps the fixed
+    // brightness the EDK2 firmware already programmed. Never claim or drive the
+    // native backlight service; report success so the framebuffer start treats
+    // the backlight as ready. Consequence: brightness cannot be adjusted.
     if (!p->getProperty("display-backlight")) return true;
-    if (!displayProperty32(p, "display-backlight", backlightIdentifier) || !backlightIdentifier) return false;
-    auto *matching = serviceMatching("IOService");
-    auto *properties = OSDictionary::withCapacity(2);
-    if (!matching || !properties) { OSSafeReleaseNULL(matching); OSSafeReleaseNULL(properties); return false; }
-    bool valid = number(properties, "DisplayBacklightIdentifier", backlightIdentifier, 32) &&
-        number(properties, "DisplayBacklightProtocolVersion", 1, 32) &&
-        matching->setObject("IOPropertyMatch", properties);
-    if (valid) backlight = waitForMatchingService(matching, 5000000000ULL);
-    properties->release(); matching->release();
-    if (!backlight) {
-        IOLog("QcomDisplay: backlight service unavailable identifier=%u; framebuffer not started\n", backlightIdentifier);
-        return false;
-    }
-    backlightClaimed = backlightRequest(DisplayBacklight::Claim) == kIOReturnSuccess;
-    if (!backlightClaimed)
-        IOLog("QcomDisplay: backlight claim failed identifier=%u; framebuffer not started\n", backlightIdentifier);
-    else {
-        backlightRequest(DisplayBacklight::SetBrightness, 4095); // firmware-inherited level is 0 during boot
-        backlightRequest(DisplayBacklight::SetPower, 1);         // always-on backlight for retained console raster
-    }
-    return backlightClaimed;
+    IOLog("QcomDisplay: backlight left to EDK2 firmware (fixed brightness)\n");
+    return true;
 }
 IOReturn QcomDisplay::backlightRequest(DisplayBacklight::Operation operation, uint32_t value) {
     if (!backlight) return kIOReturnUnsupported;
