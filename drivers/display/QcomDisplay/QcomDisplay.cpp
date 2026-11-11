@@ -179,8 +179,9 @@ bool QcomDisplay::start(IOService *provider) {
     }
     resourcesReady = true;
     nativeStarted = true;
-    // Publish native display-pipe nubs before the framework start looks them up
-    // (IOMobileFramebufferLegacy::start does findAndRetainService("AppleDisplayPipe")).
+    // Fix B: present ourselves as the native display-pipe service so the
+    // framework start's findAndRetainService("AppleDisplayPipe") resolves.
+    setName("AppleDisplayPipe");
     publishBelow(provider);
     if (!super::start(provider)) {
         stopFramework(provider);
