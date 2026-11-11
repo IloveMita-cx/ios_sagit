@@ -386,8 +386,8 @@ jobs:
           echo "=== build/output/Extensions ==="
           ls -1 build/output/Extensions 2>/dev/null | head -60 || echo "(no Extensions dir)"
 
-      - name: Pack apfs kernel collection (run 95 boot)
-        run: python3 scripts/toolchain.py pack-drivers --target SDM835 -j $JOBS --collection apfs --kernelcache build/ios18-kext-analysis/kernelcache.release.ipad7c.macho 2>&1 | tee -a "$RUNNER_TEMP/kernelcache.log"
+      - name: Pack display-runtime kernel collection (apfs + display driver)
+        run: python3 scripts/toolchain.py pack-drivers --target SDM835 -j $JOBS --collection display-runtime --kernelcache build/ios18-kext-analysis/kernelcache.release.ipad7c.macho 2>&1 | tee -a "$RUNNER_TEMP/kernelcache.log"
 
       - name: Show rootauth patch result
         run: |
@@ -484,13 +484,13 @@ jobs:
           for lib in ci/dylibs/*.dylib; do if [ -f "$lib" ]; then TRUST_FLAGS="$TRUST_FLAGS --trust-file $lib"; fi; done
           echo "trust flags: [$TRUST_FLAGS]"
           python3 scripts/build-bridge.py \
-            --kernel build/output/kernelcache.sdm835.apfs \
+            --kernel build/output/kernelcache.sdm835.display-runtime \
             --apfs-report ci-phone-apfs.json \
             --firmware-report build/apfs/prepared-firmware.json \
             --trust-cache build/ufs-mount/preboot/cryptex1/current/os.dmg.trustcache \
             --trust-cache build/ufs-mount/preboot/cryptex1/current/app.dmg.trustcache \
             $TRUST_FLAGS \
-            --ufs-handoff --development-unsealed-root --development-no-sep --development-legacy-data --development-no-apple-pmgr --development-watchdog-policy --watchdog-seconds 31 \
+            --ufs-handoff --display-handoff-profile tools/display-handoff.json --development-unsealed-root --development-no-sep --development-legacy-data --development-no-apple-pmgr --development-watchdog-policy --watchdog-seconds 31 \
             --os-environment darwinos \
             --extra-boot-args "imageboot-attach=file:///usr/standalone/firmware/Cryptex1/SystemOS.dmg imageboot-mountpoint=/private/preboot/Cryptexes imageboot-fstype=apfs imageboot-parent-role=preboot imageboot-parent-mountpoint=/private/preboot imageboot-volume-uuid=4A77BA00-2826-44C4-B883-1FA92AC36880 vm-pagesize=16384 -wdt_no_pmu amfi_get_out_of_my_way=1 pmap_cs_allow_any_signature=1 cs_enforcement_disable=1" \
             --output build/apfs/bridge 2>&1 | tee -a "$RUNNER_TEMP/bridge.log"
