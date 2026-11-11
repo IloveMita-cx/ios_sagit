@@ -177,11 +177,6 @@ bool QcomDisplay::start(IOService *provider) {
         IOLog("QcomDisplay: display resource initialization failed\n");
         releaseResources(); return false;
     }
-    resourcesReady = true;
-    nativeStarted = true;
-    // Publish native display-pipe nubs before the framework start looks them up
-    // (IOMobileFramebufferLegacy::start does findAndRetainService("AppleDisplayPipe")).
-    IOService::publishBelow(provider);
     if (!super::start(provider)) {
         stopFramework(provider);
         releaseResources(); return false;
