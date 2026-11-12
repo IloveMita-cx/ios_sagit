@@ -226,6 +226,49 @@ def prepare_no_sep_keystore(source, destination):
             'native_failure_results_preserved':True, 'sandbox_exec_bypassed':False}
 
 
+DISPLAY_PIPE_CLASS = b'AppleDisplayPipe'
+DISPLAY_PIPE_ALIAS = b'QcomDisplay' + b'\0' * 6
+
+
+def prepare_display_pipe_alias(source, destination):
+    """Make the native framebuffer's display-pipe lookup match our service.
+
+    IOMobileFramebufferLegacy::start() resolves its display pipe by the literal
+    class name "AppleDisplayPipe". A driver that inherits the legacy base
+    directly never publishes that subclass, so the lookup fails and start()
+    returns false. Renaming every occurrence of the literal to the service this
+    driver does publish is a same-length rewrite: no segment, load address,
+    offset or signature table moves, so nothing outside the cstring changes.
+    """
+    data = source.read_bytes()
+    needle = DISPLAY_PIPE_CLASS + b'\0'
+    if len(DISPLAY_PIPE_ALIAS) != len(needle):
+        raise ValueError('display pipe alias must preserve cstring length')
+    offsets = []
+    start = 0
+    while True:
+        found = data.find(needle, start)
+        if found < 0:
+            break
+        offsets.append(found)
+        start = found + len(needle)
+    if not offsets:
+        raise ValueError('display pipe class name absent from kernelcache')
+    result = bytearray(data)
+    for offset in offsets:
+        result[offset:offset + len(needle)] = DISPLAY_PIPE_ALIAS
+    rewritten = bytes(result)
+    destination.write_bytes(rewritten)
+    return {'policy':'development-display-pipe-alias',
+            'source':str(source),
+            'source_sha256':hashlib.sha256(data).hexdigest(),
+            'output_sha256':hashlib.sha256(rewritten).hexdigest(),
+            'class_name':DISPLAY_PIPE_CLASS.decode(),
+            'alias':DISPLAY_PIPE_ALIAS.rstrip(b'\0').decode(),
+            'rewritten_offsets':[hex(o) for o in offsets],
+            'rewrite':'same-length cstring; segment and signature layout unchanged'}
+
+
 def configure_no_sep(tree):
     """Use native APFS/AppleKeyStore no-SEP policy without changing Sandbox."""
     filesystems = next(n for n in tree['children'] if n['name'] == 'filesystems')
@@ -1327,6 +1370,7 @@ def main():
     parser.add_argument('--development-unsealed-root', action='store_true', help='explicit DEVELOPMENT-kernel mode for this rebuilt unsealed System')
     parser.add_argument('--development-no-sep', action='store_true', help='use native APFS DoNotUseSEP and AppleKeyStore aks-endpoint=0 policy')
     parser.add_argument('--development-legacy-data', action='store_true', help='use native legacy shared Data initialization instead of firmware e-apfs split user volumes (requires --development-no-sep)')
+    parser.add_argument('--development-display-pipe-alias', action='store_true', help='rename the native IOMobileFramebuffer display-pipe class lookup to this driver (same-length cstring rewrite)')
     parser.add_argument('--development-hactivation', action='store_true', help='select the iOS native Hactivation branch using the development-fused /chosen tuple; restricted to this Sagit port')
     parser.add_argument('--development-no-apple-pmgr', action='store_true', help='explicitly omit the Apple-only AMFI PMGRAON hardware latch on the audited development port; requires no-SEP and unsealed-root modes')
     parser.add_argument('--development-watchdog-policy', action='store_true', help='adapt the audited watchdogd hardware service allowlist to QualcommWatchdogTimer; requires unsealed-root mode')
@@ -1464,6 +1508,15 @@ def main():
         keystore_policy = prepare_no_sep_keystore(kernel, prepared_kernel)
         if keystore_policy:
             kernel = prepared_kernel
+    display_pipe_alias = None
+    if args.development_display_pipe_alias:
+        if not args.development_unsealed_root:
+            parser.error('--development-display-pipe-alias requires --development-unsealed-root')
+        prepared_kernel = out/'display-pipe-alias.kernelcache'
+        if kernel == prepared_kernel:
+            parser.error('display pipe alias input must differ from generated output')
+        display_pipe_alias = prepare_display_pipe_alias(kernel, prepared_kernel)
+        kernel = prepared_kernel
     run('dtc', '-I', 'dts', '-O', 'dtb', '-i', ROOT/'device_trees', '-o', dtbpath, args.dts.resolve())
     tree = parse_fdt((dtbpath).read_bytes())
     hactivation = configure_development_hactivation(tree) if args.development_hactivation else None
@@ -1839,6 +1892,7 @@ def main():
     report['development_no_sep'] = args.development_no_sep
     report['development_hactivation'] = hactivation or {'requested': False}
     report['keystore_endpoint_policy'] = keystore_policy
+    report['display_pipe_alias'] = display_pipe_alias
     report['development_legacy_data'] = args.development_legacy_data
     report['amfi_platform'] = amfi_platform
     report['watchdog_service_policy'] = watchdog_policy
