@@ -488,6 +488,7 @@ jobs:
           if [ -f ci/bash ]; then TRUST_FLAGS="$TRUST_FLAGS --trust-file ci/bash"; fi
           for lib in ci/dylibs/*.dylib; do if [ -f "$lib" ]; then TRUST_FLAGS="$TRUST_FLAGS --trust-file $lib"; fi; done
           echo "trust flags: [$TRUST_FLAGS]"
+          echo "display_pipe_alias input = [${{ inputs.display_pipe_alias }}]"
           python3 scripts/build-bridge.py \
             --kernel build/output/kernelcache.sdm835.display-runtime \
             --apfs-report ci-phone-apfs.json \
@@ -498,7 +499,7 @@ jobs:
             --ufs-handoff --display-handoff-profile tools/display-handoff.json --development-unsealed-root --development-no-sep --development-legacy-data --development-no-apple-pmgr --development-watchdog-policy --watchdog-seconds 31 \
             ${{ inputs.display_pipe_alias && '--development-display-pipe-alias' || '' }} \
             --os-environment darwinos \
-            --extra-boot-args "imageboot-attach=file:///usr/standalone/firmware/Cryptex1/SystemOS.dmg imageboot-mountpoint=/private/preboot/Cryptexes imageboot-fstype=apfs imageboot-parent-role=preboot imageboot-parent-mountpoint=/private/preboot imageboot-volume-uuid=4A77BA00-2826-44C4-B883-1FA92AC36880 vm-pagesize=16384 -wdt_no_pmu amfi_get_out_of_my_way=1 pmap_cs_allow_any_signature=1 cs_enforcement_disable=1" \
+            --extra-boot-args "imageboot-attach=file:///usr/standalone/firmware/Cryptex1/SystemOS.dmg imageboot-mountpoint=/private/preboot/Cryptexes imageboot-fstype=apfs imageboot-parent-role=preboot imageboot-parent-mountpoint=/private/preboot imageboot-volume-uuid=4A77BA00-2826-44C4-B883-1FA92AC36880 vm-pagesize=16384 zsize=512 -wdt_no_pmu amfi_get_out_of_my_way=1 pmap_cs_allow_any_signature=1 cs_enforcement_disable=1" \
             --output build/apfs/bridge 2>&1 | tee -a "$RUNNER_TEMP/bridge.log"
 
       - name: Pack boot image
