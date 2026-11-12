@@ -1517,6 +1517,7 @@ def main():
             parser.error('display pipe alias input must differ from generated output')
         display_pipe_alias = prepare_display_pipe_alias(kernel, prepared_kernel)
         kernel = prepared_kernel
+        print('display-pipe-alias: %s' % json.dumps(display_pipe_alias, sort_keys=True), flush=True)
     run('dtc', '-I', 'dts', '-O', 'dtb', '-i', ROOT/'device_trees', '-o', dtbpath, args.dts.resolve())
     tree = parse_fdt((dtbpath).read_bytes())
     hactivation = configure_development_hactivation(tree) if args.development_hactivation else None
