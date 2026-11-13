@@ -1419,11 +1419,14 @@ static SYSCTL_INT(_debug, OID_AUTO, darkwake, CTLFLAG_RW, &gDarkWakeFlags, 0, ""
 static int
 sysctl_aotmetrics SYSCTL_HANDLER_ARGS
 {
+	IOPMAOTMetrics nullMetrics = {};
+
 	if (NULL == gRootDomain) {
-		return 0;
+		/* Same reason as the aotmode getters: return defined zeroed metrics
+		 * rather than success with no value written. */
+		return sysctl_io_opaque(req, &nullMetrics, sizeof(IOPMAOTMetrics), NULL);
 	}
 	if (NULL == gRootDomain->_aotMetrics) {
-		IOPMAOTMetrics nullMetrics = {};
 		return sysctl_io_opaque(req, &nullMetrics, sizeof(IOPMAOTMetrics), NULL);
 	}
 	return sysctl_io_opaque(req, gRootDomain->_aotMetrics, sizeof(IOPMAOTMetrics), NULL);
@@ -1465,7 +1468,9 @@ sysctl_aotmodebits
 	uint32_t new_value;
 
 	if (NULL == gRootDomain) {
-		return 0;
+		/* No IOPMrootDomain on Qualcomm platforms: answer with a defined
+		 * zero instead of returning success without writing the result. */
+		return sysctl_io_number(req, 0, sizeof(uint32_t), &new_value, &changed);
 	}
 	error = sysctl_io_number(req, gRootDomain->_aotMode, sizeof(uint32_t), &new_value, &changed);
 	if (changed && gIOPMWorkLoop) {
@@ -1487,7 +1492,12 @@ sysctl_aotmode
 	uint32_t new_value;
 
 	if (NULL == gRootDomain) {
-		return 0;
+		/* Qualcomm platforms never instantiate IOPMrootDomain, so there is no
+		 * backing _aotMode. Report a defined zero instead of returning success
+		 * without writing the result: callers such as BacklightServicesHost
+		 * assert on the retrieved value, and an untouched buffer would hand
+		 * them uninitialised bytes. */
+		return sysctl_io_number(req, 0, sizeof(uint32_t), &new_value, &changed);
 	}
 	error = sysctl_io_number(req, gRootDomain->_aotMode, sizeof(uint32_t), &new_value, &changed);
 	if (changed && gIOPMWorkLoop) {
