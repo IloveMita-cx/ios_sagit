@@ -491,8 +491,17 @@ def configure_display_handoff(tree, path, smmu_handoff=False, disable_backlight=
         if not panels:
             continue
         dsi['props']['status'] = b'okay\0'
+        # The bridge can only rewrite an existing property of the exact size, so
+        # create the DSI/panel handoff slots here. The EFI handoff fills the two
+        # clock rates from the firmware clock protocol and asserts the flags it
+        # actually verified; nothing here is a guessed value.
+        for name in ('qcom,dsi-handoff-version', 'qcom,dsi-handoff-flags', 'dsi-lanes',
+                     'qcom,dsi-byte-clock-hz', 'qcom,dsi-escape-clock-hz'):
+            dsi['props'][name] = bytes(4)
         for panel in panels:
             panel['props']['status'] = b'okay\0'
+            for name in ('panel-handoff-version', 'panel-handoff-flags'):
+                panel['props'][name] = bytes(4)
         enabled_dsi += 1
     if enabled_dsi == 0:
         raise ValueError('display handoff requires a DSI controller with a panel child')
