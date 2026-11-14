@@ -18,9 +18,14 @@ from baseband_dyld import Cache, Files
 
 ROOT = Path(__file__).resolve().parents[1]
 BLSH = '/System/Library/PrivateFrameworks/BacklightServicesHost.framework/BacklightServicesHost'
-# imageOffset values from D:\\hackios\\crash-preboard\\data.bin (imageIndex 2)
-INIT_OFF = 0x89E0    # 35296  -[BLSHBacklightOSInterfaceProvider initWithPlatformProvider:]
-COLD_OFF = 0x5C96C   # 379244 -[BLSHBacklightOSInterfaceProvider initWithPlatformProvider:].cold.1
+# imageOffset values from the PreBoard .ips (imageIndex 2). INIT_OFF is the
+# return address recorded in frame 1, not the symbol start: the crash report's
+# symbolLocation (2132 = 0x854) puts -[BLSHBacklightOSInterfaceProvider
+# initWithPlatformProvider:] at 0x818C. Sampling starts there so the leading
+# conditionals that branch into .cold.1 are included.
+FUNC_OFF = 0x818C    # -[BLSHBacklightOSInterfaceProvider initWithPlatformProvider:] symbol start
+INIT_OFF = 0x89E0    # 35296  frame 1 recorded return address (FUNC_OFF + 0x854)
+COLD_OFF = 0x5C96C   # 379244 brk inside .cold.1 (.cold.1 starts at 0x5C894)
 
 
 def load_iodfb():
@@ -80,19 +85,18 @@ def main():
         cache = Cache(Files(image, decoder))
         base = cache.images[BLSH]
         report = {'path': BLSH, 'base': hex(base)}
-        # INIT_OFF/COLD_OFF are the addresses recorded in the crash report: the
-        # return address after the call and the brk itself. The conditional
-        # branch that reaches them and the cold helper's own prologue live
-        # before those addresses, so take a pre-roll window as well.
-        PRE = 0x300
-        for name, off, size in [('initWithPlatformProvider', INIT_OFF, 0x800),
-                                ('cold1', COLD_OFF, 0x400)]:
-            start = off - PRE
-            span = size + PRE
+        # Sample from the confirmed symbol start (0x818C), not from the recorded
+        # return address, so every branch that can reach .cold.1 is covered.
+        # .cold.1 itself starts at 0x5C894; take a little before it too.
+        windows = [
+            ('initWithPlatformProvider', FUNC_OFF, 0xB00, INIT_OFF),
+            ('cold1', COLD_OFF - 0x300, 0x700, COLD_OFF),
+        ]
+        for name, start, span, frame in windows:
             data = cache.read(base + start, span)
             (out / f'{name}.bin').write_bytes(data)
             dump(data, base + start, out / f'{name}.disasm.txt')
-            report[name] = {'va': hex(base + start), 'frame_va': hex(base + off),
+            report[name] = {'va': hex(base + start), 'frame_va': hex(base + frame),
                             'bytes': span, 'sha256': digest(data).hex()}
         (out / 'manifest.json').write_text(json.dumps(report, indent=2) + '\n')
         dump_strings(cache, out)
