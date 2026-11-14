@@ -468,6 +468,35 @@ def configure_display_handoff(tree, path, smmu_handoff=False, disable_backlight=
     props['display-physical-width-mm'] = struct.pack('>I', width)
     props['display-physical-height-mm'] = struct.pack('>I', height)
     props['display-uuid'] = identifier.encode() + b'\0'
+
+    # The vendor device tree ships the DSI controller and its panel disabled as
+    # well. Enabling only the DPU leaves QcomMIPIDSI and QcomPanel without a
+    # provider, and QcomDisplay links QcomMIPIDSI at load time, so the whole
+    # display stack silently fails to instantiate.
+    def compatible_of(node):
+        return node['props'].get('compatible', b'').split(b'\0')
+
+    dsi_nodes = []
+
+    def visit_dsi(node):
+        if b'qcom,msm8998-dsi-ctrl' in compatible_of(node):
+            dsi_nodes.append(node)
+        for child in node['children']:
+            visit_dsi(child)
+
+    visit_dsi(tree)
+    enabled_dsi = 0
+    for dsi in dsi_nodes:
+        panels = [c for c in dsi['children'] if b'qcom,dsi-panel' in compatible_of(c)]
+        if not panels:
+            continue
+        dsi['props']['status'] = b'okay\0'
+        for panel in panels:
+            panel['props']['status'] = b'okay\0'
+        enabled_dsi += 1
+    if enabled_dsi == 0:
+        raise ValueError('display handoff requires a DSI controller with a panel child')
+
     backlight = None if disable_backlight else profile.get('backlight')
     if disable_backlight:
         props.pop('display-backlight', None)
