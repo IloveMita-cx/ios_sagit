@@ -1044,7 +1044,7 @@ static int invalidateGestaltCache() {
 }
 static void registry() {
     chosenDisplayScale();
-    const char *classes[] = {"IOMobileFramebuffer", "IOSurfaceRoot", "AppleARMMIPIDSIController", "QcomPanel", "PMI8998WLED", "AppleKeyStore"};
+    const char *classes[] = {"IOMobileFramebuffer", "IOMobileFramebufferLegacy", "IOSurfaceRoot", "AppleARMMIPIDSIController", "AppleARMMIPIDSIDevice", "QcomMIPIDSI", "QcomPanel", "QcomDisplay", "PMI8998WLED", "AppleKeyStore"};
     for (const char *name : classes) {
         mach_port_t iterator = 0;
         kern_return_t result = IOServiceGetMatchingServices(0, IOServiceMatching(name), &iterator);
