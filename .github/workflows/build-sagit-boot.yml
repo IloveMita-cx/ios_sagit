@@ -478,6 +478,21 @@ jobs:
             exit 1
           }
 
+      # 诊断客户端：设备端 root bash 用它查询 IOMobileFramebuffer / CADisplay 枚举，
+      # 结果写进 /private/var/tmp/mi6-diag.txt，经 UMS 取回，避免依赖串口刷屏。
+      - name: Build display client (diagnostic)
+        continue-on-error: true
+        run: python3 scripts/toolchain.py build-display-client 2>&1 | tee -a "$RUNNER_TEMP/displayclient.log"
+
+      - name: Upload display client
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: display-client
+          path: build/output/displayctl
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Build XnuBridge.efi
         run: |
           # 用手机里已装 ios.apfs 的 UUID（584B947F-），而不是本轮新构建的随机 UUID，
@@ -486,6 +501,7 @@ jobs:
           if [ -f ci/watchdogd.patched ]; then TRUST_FLAGS="$TRUST_FLAGS --trust-file ci/watchdogd.patched"; fi
           if [ -f ci/launchd.plist.sig ]; then TRUST_FLAGS="$TRUST_FLAGS --trust-file ci/launchd.plist.sig"; fi
           if [ -f ci/bash ]; then TRUST_FLAGS="$TRUST_FLAGS --trust-file ci/bash"; fi
+          if [ -f build/output/displayctl ]; then TRUST_FLAGS="$TRUST_FLAGS --trust-file build/output/displayctl"; fi
           for lib in ci/dylibs/*.dylib; do if [ -f "$lib" ]; then TRUST_FLAGS="$TRUST_FLAGS --trust-file $lib"; fi; done
           echo "trust flags: [$TRUST_FLAGS]"
           echo "display_pipe_alias input = [${{ inputs.display_pipe_alias }}]"
