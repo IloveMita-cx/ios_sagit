@@ -71,12 +71,16 @@ int bridge_display_dma_finish(void *, uint64_t, uint64_t);
 static void *display_tree;
 static uint64_t framebuffer, framebuffer_size;
 static uint32_t width, height, stride, source, intf, command, pp;
+static uint32_t byteClockHz, escapeClockHz;
 static const uint64_t mdp = 0x0c901000;
-static int put(const char *key, uint64_t value, unsigned bytes) {
-    uint32_t size; unsigned char *p = dt_property(display_tree,"display-controller@c901000",key,&size);
+static int put_at(const char *node, const char *key, uint64_t value, unsigned bytes) {
+    uint32_t size; unsigned char *p = dt_property(display_tree,node,key,&size);
     if (!p || size != bytes) return -1;
     for (unsigned i = 0; i < bytes; ++i) p[i] = (unsigned char)(value >> (8*i));
     return 0;
+}
+static int put(const char *key, uint64_t value, unsigned bytes) {
+    return put_at("display-controller@c901000", key, value, bytes);
 }
 static uint32_t get(const char *key) {
     uint32_t size; const unsigned char *p = dt_property(display_tree,"display-controller@c901000",key,&size);
@@ -167,6 +171,8 @@ int bridge_display_prepare(EFI_BOOT_SERVICES *bs, void *tree, struct boot_args *
             bridge_puts("[Display handoff] cannot retain clock ");bridge_puts(names[n]);bridge_puts("\n");return -5;
         }
         clock->get_frequency(clock,id,&frequency);
+        if (n == 5) byteClockHz = frequency;
+        else if (n == 6) escapeClockHz = frequency;
         bridge_puts("[Display handoff] retained ");bridge_puts(names[n]);bridge_puts(" Hz=");bridge_hex(frequency);bridge_puts("\n");
         UINT32 observed=0;EFI_STATUS measured=clock->calculate_frequency(clock,id,&observed);
         bridge_puts("[Display clock measurement] name=");bridge_puts(names[n]);bridge_puts(" status=");bridge_hex(measured);
@@ -212,6 +218,22 @@ int bridge_display_takeover(void) {
         // actual AP ownership are independently admitted by PMI8998WLED.
         record[0] = 1; record[4] = 3;
     }
+    // Hand the verified DSI and panel state to the kernel drivers. The two
+    // clock rates are the firmware-reported frequencies verified above; nothing
+    // here is a fabricated value. Lanes is 4 for the Mi 6 JDI panel and is only
+    // a validation field, never programmed by QcomMIPIDSI.
+    if (!byteClockHz || !escapeClockHz) return -12;
+    const char *dsi_node = intf == 1 ? "dsi@c994000" : "dsi@c996000";
+    if (put_at(dsi_node, "qcom,dsi-handoff-version", 1, 4) ||
+        put_at(dsi_node, "qcom,dsi-handoff-flags", 31, 4) ||
+        put_at(dsi_node, "dsi-lanes", 4, 4) ||
+        put_at(dsi_node, "qcom,dsi-byte-clock-hz", byteClockHz, 4) ||
+        put_at(dsi_node, "qcom,dsi-escape-clock-hz", escapeClockHz, 4)) return -13;
+    if (put_at("panel@0", "panel-handoff-version", 1, 4) ||
+        put_at("panel@0", "panel-handoff-flags", 3, 4)) return -14;
+    bridge_puts("[Display handoff] DSI handoff byte-hz="); bridge_hex(byteClockHz);
+    bridge_puts(" esc-hz="); bridge_hex(escapeClockHz);
+    bridge_puts(" lanes=4 flags=31 panel-flags=3\n");
     bridge_puts("[Display handoff] post-EFI raster and pinned resources verified; LCD enabled\n");
     return 0;
 }
