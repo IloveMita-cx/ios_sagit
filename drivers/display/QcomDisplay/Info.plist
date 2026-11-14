@@ -46,8 +46,6 @@
 		<string>1.0.0</string>
 		<key>org.darwin.driver.QcomMIPIDSI</key>
 		<string>1.0.0</string>
-		<key>org.darwin.driver.PMI8998WLED</key>
-		<string>1.0.0</string>
 	</dict>
 	<key>IOKitPersonalities</key>
 	<dict>
