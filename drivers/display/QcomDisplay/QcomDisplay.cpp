@@ -122,7 +122,19 @@ bool QcomDisplay::configure(IOService *p) {
         if (!panelOpened || panel->callPlatformFunction("MIPIPanelPrepare", true,
                 nullptr, nullptr, nullptr, nullptr) != kIOReturnSuccess) return false;
     }
-    return configureBacklight(p);
+    if (!configureBacklight(p)) {
+        /*
+         * Development policy: the panel stays at the brightness the EDK2
+         * firmware already programmed, so a rejected WLED handoff must not
+         * stop the display. Failing the whole configure() here leaves
+         * IOMobileFramebufferLegacy::start uncalled, CADisplay empty, and
+         * PreBoard/SpringBoard die at the FBSDisplayMode validity check.
+         * The only capability lost is runtime brightness control.
+         */
+        backlightClaimed = false;
+        IOLog("QcomDisplay: backlight handoff unavailable, keeping firmware level; framebuffer continues\n");
+    }
+    return true;
 }
 
 bool QcomDisplay::configureBacklight(IOService *p) {
