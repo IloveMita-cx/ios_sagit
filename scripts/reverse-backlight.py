@@ -80,12 +80,20 @@ def main():
         cache = Cache(Files(image, decoder))
         base = cache.images[BLSH]
         report = {'path': BLSH, 'base': hex(base)}
+        # INIT_OFF/COLD_OFF are the addresses recorded in the crash report: the
+        # return address after the call and the brk itself. The conditional
+        # branch that reaches them and the cold helper's own prologue live
+        # before those addresses, so take a pre-roll window as well.
+        PRE = 0x300
         for name, off, size in [('initWithPlatformProvider', INIT_OFF, 0x800),
                                 ('cold1', COLD_OFF, 0x400)]:
-            data = cache.read(base + off, size)
+            start = off - PRE
+            span = size + PRE
+            data = cache.read(base + start, span)
             (out / f'{name}.bin').write_bytes(data)
-            dump(data, base + off, out / f'{name}.disasm.txt')
-            report[name] = {'va': hex(base + off), 'bytes': size, 'sha256': digest(data).hex()}
+            dump(data, base + start, out / f'{name}.disasm.txt')
+            report[name] = {'va': hex(base + start), 'frame_va': hex(base + off),
+                            'bytes': span, 'sha256': digest(data).hex()}
         (out / 'manifest.json').write_text(json.dumps(report, indent=2) + '\n')
         dump_strings(cache, out)
         print(json.dumps(report, indent=2))
