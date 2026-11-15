@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [codex/preboard-diagnosis]
-    paths: ['.github/workflows/preboard-diagnosis.yml', 'scripts/reverse-backlight.py']
+    paths: ['.github/workflows/preboard-diagnosis.yml', 'scripts/reverse-backlight.py', 'scripts/inspect-preboard-entitlement.py']
 permissions:
   contents: read
 jobs:
@@ -26,6 +26,11 @@ jobs:
           python3 scripts/build-apfs.py firmware firmware/22H374.ipsw
       - name: Extract PreBoard assertion evidence
         run: python3 scripts/reverse-backlight.py
+      - name: Inspect stock PreBoard signature
+        run: |
+          source=$(python3 -c 'import json; print(json.load(open("build/apfs/prepared-firmware.json"))["components"]["OS"]["image"])')
+          build/apfs/apfs-image --source "$source" --output /tmp/preboard-unused.img --extract-volume system --extract-file /Applications/PreBoard.app/PreBoard --extract-out /tmp/preboard-stock
+          python3 scripts/inspect-preboard-entitlement.py /tmp/preboard-stock/data.bin "$source" build/backlight-reverse/libzbitmap.so > build/backlight-reverse/preboard-signature.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
