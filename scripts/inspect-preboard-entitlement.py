@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Report the display-state entitlement embedded in the original PreBoard Mach-O."""
+import ctypes
 import hashlib
 import json
 import plistlib
@@ -7,12 +8,12 @@ from pathlib import Path
 import struct
 import sys
 from uuid import UUID
+import zlib
 
 from macho_development_sign import signature_blobs
 
 DISPLAY_STATE = 'com.apple.QuartzCore.display-state'
 RUN_N_UUID = 'dfd2aed4-e2d8-3ac0-be34-9637b1042bd3'
-APP = '/Applications/PreBoard.app/PreBoard'
 
 
 def inspect(data):
@@ -50,21 +51,67 @@ def inspect(data):
             'der_contains_display_state_key': der is not None and DISPLAY_STATE.encode() in der}
 
 
-def main():
-    path = Path(sys.argv[1])
+def read_extracted(path, decoder_path):
     if path.stat().st_size:
-        data = path.read_bytes()
+        return path.read_bytes()
+    header = (path.parent / 'xattr_com.apple.decmpfs').read_bytes()
+    magic, method, size = struct.unpack('<4sIQ', header)
+    if magic != b'fpmc' or not 0 < size <= 8 * 1024 * 1024:
+        raise ValueError('invalid exported decmpfs header')
+    fork = (path.parent / 'xattr_com.apple.ResourceFork').read_bytes()
+    count = (size + 65535) // 65536
+    if method == 14:
+        offsets = struct.unpack_from(f'<{count + 1}I', fork)
+        if offsets[0] != 4 * (count + 1) or offsets[-1] != len(fork):
+            raise ValueError('bad LZBITMAP resource table')
+        spans = list(zip(offsets, offsets[1:]))
+        decoder = ctypes.CDLL(str(decoder_path.resolve())).zbm_decompress
+        decoder.argtypes = (ctypes.c_void_p, ctypes.c_size_t, ctypes.c_void_p,
+                            ctypes.c_size_t, ctypes.POINTER(ctypes.c_size_t))
+        decoder.restype = ctypes.c_int
+        limit = len(fork)
+        previous = offsets[0]
+    elif method == 4:
+        base, limit, _, _ = struct.unpack_from('>4I', fork)
+        if struct.unpack_from('<I', fork, base + 4)[0] != count:
+            raise ValueError('bad zlib resource table')
+        spans = [(base + 4 + off, base + 4 + off + length)
+                 for off, length in struct.iter_unpack('<II', fork[base + 8:base + 8 + count * 8])]
+        previous = base + 8 + count * 8
     else:
-        # Some stock executables have APFS file compression and an empty data fork.
-        from apfs_sealed import SealedImage
-        from baseband_dyld import Files
-        image = SealedImage(Path(sys.argv[2]))
-        try:
-            files = Files(image, Path(sys.argv[3]))
-            data = files.read(APP, 0, files.info(APP)['size'])
-        finally:
-            image.close()
-    print(json.dumps(inspect(data), indent=2))
+        raise ValueError(f'unsupported decmpfs method {method}')
+    output = bytearray()
+    for index, (start, end) in enumerate(spans):
+        length = min(65536, size - index * 65536)
+        if not previous <= start < end <= min(limit, len(fork)):
+            raise ValueError('invalid compressed chunk bounds')
+        previous = end
+        compressed = fork[start:end]
+        if compressed[:1] == b'\xff':
+            data = compressed[1:]
+        elif method == 4:
+            if len(compressed) < 3 or compressed[0] != 0x78:
+                raise ValueError('invalid zlib header')
+            inflater = zlib.decompressobj(-15)
+            data = inflater.decompress(compressed[2:], length + 1)
+            if not inflater.eof:
+                raise ValueError('incomplete deflate chunk')
+        else:
+            buffer = ctypes.create_string_buffer(length)
+            written = ctypes.c_size_t()
+            if decoder(buffer, length, compressed, len(compressed), ctypes.byref(written)) or written.value != length:
+                raise ValueError('LZBITMAP decode failed')
+            data = buffer.raw
+        if len(data) != length:
+            raise ValueError('unexpected decoded chunk length')
+        output += data
+    if len(output) != size:
+        raise ValueError('incomplete executable')
+    return bytes(output)
+
+
+def main():
+    print(json.dumps(inspect(read_extracted(Path(sys.argv[1]), Path(sys.argv[3]))), indent=2))
 
 
 if __name__ == '__main__':
