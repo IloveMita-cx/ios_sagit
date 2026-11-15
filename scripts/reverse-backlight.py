@@ -12,6 +12,7 @@ import json
 from pathlib import Path
 import struct
 import subprocess
+from uuid import UUID
 
 from apfs_sealed import SealedImage, digest
 from baseband_dyld import Cache, Files
@@ -68,6 +69,73 @@ def dump_strings(cache, out):
     (out / 'strings.txt').write_text('\n'.join(lines) + '\n')
 
 
+def dump_assertion_inputs(cache, out):
+    # Addresses apply only to the cache and image validated by main().
+    spans = {
+        'message_stub': (0x21735BCA0, 0x30),
+        'assertion_object_1': (0x2523D4698, 0x20),
+        'assertion_object_2': (0x2523D46B8, 0x20),
+        'ivar_offsets': (0x25ACEC41C, 0x08),
+    }
+    report = {}
+    for name, (va, size) in spans.items():
+        data = cache.read(va, size)
+        (out / f'{name}.bin').write_bytes(data)
+        report[name] = {'va': hex(va), 'bytes': size, 'raw': data.hex()}
+    stub_va, stub_size = spans['message_stub']
+    stub = cache.read(stub_va, stub_size)
+    dump(stub, stub_va, out / 'message_stub.disasm.txt')
+
+    # An arm64 ObjC message-send stub typically uses ADRP x1; LDR x1,[x1,...].
+    # Record the storage address even if this stub uses a different layout.
+    pages = {}
+    text_inputs = {}
+    for pos in range(0, len(stub), 4):
+        word, = struct.unpack_from('<I', stub, pos)
+        reg = word & 31
+        if word & 0x9F000000 == 0x90000000:
+            imm = ((word >> 29) & 3) | (((word >> 5) & 0x7FFFF) << 2)
+            if imm & (1 << 20):
+                imm -= 1 << 21
+            pages[reg] = ((stub_va + pos) & ~0xFFF) + (imm << 12)
+        elif word & 0xFFC00000 == 0xF9400000:
+            base_reg = (word >> 5) & 31
+            if reg == 1 and base_reg in pages:
+                text_inputs[f'selector_ref_{pos:x}'] = pages[base_reg] + ((word >> 10) & 0xFFF) * 8
+            pages.pop(reg, None)
+    offsets = struct.unpack('<ii', cache.read(0x25ACEC41C, 8))
+    report['ivar_offsets'].update(checked_field_offset=offsets[0], stored_field_offset=offsets[1])
+    for name in ('assertion_object_1', 'assertion_object_2'):
+        va, _ = spans[name]
+        flags, chars, length = struct.unpack('<QQQ', cache.read(va + 8, 24))
+        report[name].update(flags=hex(flags), raw_chars=hex(chars), length=length)
+        text_inputs[name] = va + 16
+
+    # Keep pointer interpretations separate. A mapped, readable candidate is
+    # useful evidence but does not prove which slide-info format applies.
+    shared_base = cache.maps[0][0]
+    for name, va in text_inputs.items():
+        raw, = struct.unpack('<Q', cache.read(va, 8))
+        candidates = {'direct': raw, 'slide_v5_candidate': shared_base + (raw & ((1 << 34) - 1))}
+        item = {'storage_va': hex(va), 'raw_pointer': hex(raw), 'candidates': []}
+        for encoding, target in candidates.items():
+            try:
+                length = report.get(name, {}).get('length')
+                if length is not None and 0 < length <= 1024:
+                    chars = cache.read(target, length)
+                    value = chars.decode('utf-8')
+                    if not value.isprintable():
+                        value = cache.read(target, 2 * length).decode('utf-16-le')
+                else:
+                    value = cstring(cache, target, 256)
+                if value and value.isprintable() and '\ufffd' not in value:
+                    item['candidates'].append({'encoding': encoding, 'va': hex(target), 'text': value})
+            except (ValueError, UnicodeError):
+                continue
+        report.setdefault('text_references', {})[name] = item
+    (out / 'assertion-inputs.json').write_text(json.dumps(report, indent=2) + '\n')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', type=Path, default=ROOT / 'build/apfs/firmware/094-33089-038.dmg')
@@ -84,7 +152,10 @@ def main():
     try:
         cache = Cache(Files(image, decoder))
         base = cache.images[BLSH]
-        report = {'path': BLSH, 'base': hex(base)}
+        uuid = str(UUID(hex=cache.library(BLSH)['uuid']))
+        if base != 0x2172A2000 or uuid != '0b42b93f-0246-3cd1-ab1a-68ce37f9b496':
+            raise ValueError(f'Unexpected BacklightServicesHost: base={base:#x}, uuid={uuid}')
+        report = {'path': BLSH, 'base': hex(base), 'uuid': uuid}
         # Sample from the confirmed symbol start (0x818C), not from the recorded
         # return address, so every branch that can reach .cold.1 is covered.
         # .cold.1 itself starts at 0x5C894; take a little before it too.
@@ -100,6 +171,7 @@ def main():
                             'bytes': span, 'sha256': digest(data).hex()}
         (out / 'manifest.json').write_text(json.dumps(report, indent=2) + '\n')
         dump_strings(cache, out)
+        dump_assertion_inputs(cache, out)
         print(json.dumps(report, indent=2))
     finally:
         image.close()
