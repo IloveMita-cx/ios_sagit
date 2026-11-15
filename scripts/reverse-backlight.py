@@ -69,6 +69,34 @@ def dump_strings(cache, out):
     (out / 'strings.txt').write_text('\n'.join(lines) + '\n')
 
 
+def rebased_target(cache, va, raw):
+    # dyld_cache_header.mappingWithSlideOffset / Count.
+    path = next(path for base, size, path, _ in cache.maps if base <= va < base + size)
+    offset, count = struct.unpack('<II', cache.files.read(path, 312, 8))
+    if not offset or not 0 < count <= 32:
+        return None, None
+    mappings = cache.files.read(path, offset, count * 56)
+    for base, size, _, slide, slide_size, _, _, _ in struct.iter_unpack('<6Q2I', mappings):
+        if not (base <= va < base + size and slide and slide_size >= 24):
+            continue
+        header = cache.files.read(path, slide, min(slide_size, 40))
+        version, = struct.unpack_from('<I', header)
+        if version == 2 and len(header) >= 40:
+            mask, add = struct.unpack_from('<QQ', header, 24)
+            value = raw & ~mask
+            return version, value + add if value else 0
+        if version == 3:
+            if raw >> 63:
+                add, = struct.unpack_from('<Q', header, 16)
+                return version, add + (raw & 0xFFFFFFFF)
+            return version, raw & ((1 << 43) - 1)
+        if version == 5:
+            add, = struct.unpack_from('<Q', header, 16)
+            return version, add + (raw & ((1 << 34) - 1))
+        return version, None
+    return None, None
+
+
 def dump_assertion_inputs(cache, out):
     # Addresses apply only to the cache and image validated by main().
     spans = {
@@ -111,20 +139,24 @@ def dump_assertion_inputs(cache, out):
         report[name].update(flags=hex(flags), raw_chars=hex(chars), length=length)
         text_inputs[name] = va + 16
 
-    # Keep pointer interpretations separate. A mapped, readable candidate is
-    # useful evidence but does not prove which slide-info format applies.
-    shared_base = cache.maps[0][0]
     for name, va in text_inputs.items():
         raw, = struct.unpack('<Q', cache.read(va, 8))
-        candidates = {'direct': raw, 'slide_v5_candidate': shared_base + (raw & ((1 << 34) - 1))}
-        item = {'storage_va': hex(va), 'raw_pointer': hex(raw), 'candidates': []}
+        version, target = rebased_target(cache, va, raw)
+        candidates = {'direct': raw}
+        if target:
+            candidates[f'slide_v{version}'] = target
+        # Preserve a testable candidate if this mapping has no supported
+        # rebase record. It is not a verified fixup.
+        candidates['low_36_bits_candidate'] = raw & ((1 << 36) - 1)
+        item = {'storage_va': hex(va), 'raw_pointer': hex(raw),
+                'mapping_slide_version': version, 'candidates': []}
         for encoding, target in candidates.items():
             try:
                 length = report.get(name, {}).get('length')
                 if length is not None and 0 < length <= 1024:
                     chars = cache.read(target, length)
-                    value = chars.decode('utf-8')
-                    if not value.isprintable():
+                    value = chars.decode('utf-8', errors='replace')
+                    if not value.isprintable() or '\ufffd' in value:
                         value = cache.read(target, 2 * length).decode('utf-16-le')
                 else:
                     value = cstring(cache, target, 256)
