@@ -57,6 +57,12 @@ jobs:
           docker-images: true
           swap-storage: true
 
+      - name: Validate retained display handoff
+        run: |
+          python3 -m unittest discover -s tests -p 'test_display_retained.py' -v
+          c++ -std=c++17 -Wall -Wextra -Werror -Idrivers/display/QcomMIPIDSI tests/mipi_dsi_test.cpp -o /tmp/mipi-dsi-test
+          /tmp/mipi-dsi-test
+
       - name: Show disk after cleanup
         run: df -h /
 

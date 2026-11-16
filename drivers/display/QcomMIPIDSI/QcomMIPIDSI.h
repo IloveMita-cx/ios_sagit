@@ -38,7 +38,7 @@ private:
     IODMACommand *dma;
     IOMapper *mapper;
     uint64_t commandAddress;
-    bool prepared, gateAdded, opened, running, highSpeed, dmaPinned;
+    bool prepared, gateAdded, opened, running, highSpeed, dmaPinned, retainedOnly;
     struct Operation { unsigned kind; uint8_t type; const uint8_t *data; uint64_t length; bool enable; uint8_t *reply = nullptr; };
     static IOReturn action(OSObject *, void *, void *, void *, void *);
     IOReturn perform(Operation &);

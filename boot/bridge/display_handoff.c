@@ -71,6 +71,7 @@ int bridge_display_dma_finish(void *, uint64_t, uint64_t);
 static void *display_tree;
 static uint64_t framebuffer, framebuffer_size;
 static uint32_t width, height, stride, source, intf, command, pp;
+static uint32_t dsi_byte_hz, dsi_escape_hz, dsi_clock_valid;
 static const uint64_t mdp = 0x0c901000;
 static int put(const char *key, uint64_t value, unsigned bytes) {
     uint32_t size; unsigned char *p = dt_property(display_tree,"display-controller@c901000",key,&size);
@@ -108,6 +109,7 @@ static int live_raster(void) {
     return 0;
 }
 int bridge_display_prepare(EFI_BOOT_SERVICES *bs, void *tree, struct boot_args *ba, uint64_t bytes) {
+    dsi_byte_hz = dsi_escape_hz = dsi_clock_valid = 0;
     display_tree = tree; framebuffer = ba->video[0]&~1ULL; framebuffer_size = bytes;
     width = ba->video[3]; height = ba->video[4]; stride = ba->video[2];
     if (!framebuffer || framebuffer>UINT32_MAX || (framebuffer&4095) || !width || !height ||
@@ -166,7 +168,13 @@ int bridge_display_prepare(EFI_BOOT_SERVICES *bs, void *tree, struct boot_args *
             EFI_ERROR(clock->enable(clock,id)) || EFI_ERROR(clock->is_on(clock,id,&on)) || !on) {
             bridge_puts("[Display handoff] cannot retain clock ");bridge_puts(names[n]);bridge_puts("\n");return -5;
         }
-        clock->get_frequency(clock,id,&frequency);
+        EFI_STATUS frequency_status = clock->get_frequency(clock,id,&frequency);
+        // Reported configuration, not a live frequency measurement. Never
+        // invent a frequency when the protocol fails or returns zero.
+        if (!EFI_ERROR(frequency_status) && frequency) {
+            if (n == 5) { dsi_byte_hz = frequency; dsi_clock_valid |= 1; }
+            if (n == 6) { dsi_escape_hz = frequency; dsi_clock_valid |= 2; }
+        }
         bridge_puts("[Display handoff] retained ");bridge_puts(names[n]);bridge_puts(" Hz=");bridge_hex(frequency);bridge_puts("\n");
         UINT32 observed=0;EFI_STATUS measured=clock->calculate_frequency(clock,id,&observed);
         bridge_puts("[Display clock measurement] name=");bridge_puts(names[n]);bridge_puts(" status=");bridge_hex(measured);
@@ -178,6 +186,58 @@ int bridge_display_prepare(EFI_BOOT_SERVICES *bs, void *tree, struct boot_args *
     bridge_puts(" interface=");bridge_hex(intf);bridge_puts(" pingpong=");bridge_hex(pp);
     bridge_puts(" result=");bridge_hex((uint64_t)(int64_t)result);bridge_puts("\n");
     return result;
+}
+static void write32(unsigned char *p, uint32_t value) {
+    for (unsigned i=0;i<4;++i) p[i]=(unsigned char)(value>>(8*i));
+}
+static uint32_t read32(const unsigned char *p) {
+    return p[0] | (uint32_t)p[1]<<8 | (uint32_t)p[2]<<16 | (uint32_t)p[3]<<24;
+}
+static unsigned char *slot(const char *node, const char *key) {
+    uint32_t size;
+    unsigned char *p = dt_property(display_tree,node,key,&size);
+    return p && size == 4 ? p : 0;
+}
+static void retain_dsi(void) {
+    // Called ONLY after post-ExitBootServices live_raster() and the existing
+    // DPU handoff checks succeed. No MMIO writes and no firmware calls here.
+    const char *name = intf == 1 ? "dsi@c994000" : "dsi@c996000";
+    unsigned char *status = slot(name, "qcom,dsi-bridge-status");
+    if (!status) return; // Optional DSI diagnostics must not stop XNU.
+    write32(status, 2); // Missing/wrong-sized slots; no committed contract.
+    const char *keys[] = {"qcom,dsi-handoff-version", "qcom,dsi-handoff-flags", "dsi-lanes",
+        "qcom,dsi-byte-clock-hz", "qcom,dsi-escape-clock-hz", "qcom,dsi-clock-valid-mask",
+        "qcom,dsi-retained-control", "qcom,dsi-panel"};
+    unsigned char *p[8];
+    for (unsigned i=0;i<8;++i) if (!(p[i]=slot(name,keys[i]))) return;
+    uint32_t identifier = read32(p[7]), size;
+    void *panel = identifier ? dt_find_phandle(display_tree,identifier) : 0;
+    if (!panel) return;
+    unsigned char *pv = dt_node_property(panel,"panel-handoff-version",&size);
+    if (!pv || size != 4) return;
+    unsigned char *pf = dt_node_property(panel,"panel-handoff-flags",&size);
+    if (!pf || size != 4) return;
+    unsigned char *dp = slot("display-controller@c901000","display-panel");
+    if (!dp) return;
+    uint64_t base = 0x0c994000 + (intf-1)*0x2000;
+    uint32_t control = rd(base+4), lane_bits = (control>>4)&15, lanes = 0;
+    // Linux v6.12 msm/registers/display/dsi.xml CTRL.LANE0..3, shifted +4 on 6G.
+    if (lane_bits==1) lanes=1; else if (lane_bits==3) lanes=2;
+    else if (lane_bits==7) lanes=3; else if (lane_bits==15) lanes=4;
+    if (!lanes || !(control&1) || rd(base+0x1f0) || rd(base+0x1f4)>>24 != 3 ||
+        rd(base)>>28 != 2 || (rd(base+8)&2)) { write32(status,3); return; }
+    // Preflight every destination before committing. Version 2 / flag 64 is
+    // retained READ ONLY, never the v1 flags=31/63 ownership/DMA claims.
+    write32(p[1],64); write32(p[2],lanes);
+    write32(p[3],dsi_byte_hz); write32(p[4],dsi_escape_hz);
+    write32(p[5],dsi_clock_valid); write32(p[6],control);
+    // The observed live boot console uses this retained panel. Do not replay
+    // initialization or brightness commands, reset it, or claim DSI DMA.
+    write32(pf,3); write32(pv,1); write32(dp,identifier);
+    write32(p[0],2); write32(status,1);
+    bridge_puts("[Display handoff] DSI retained-read-only lanes="); bridge_hex(lanes);
+    bridge_puts(" byte-hz="); bridge_hex(dsi_byte_hz); bridge_puts(" esc-hz="); bridge_hex(dsi_escape_hz);
+    bridge_puts(" clock-valid="); bridge_hex(dsi_clock_valid); bridge_puts(" commands=0\n");
 }
 int bridge_display_takeover(void) {
     int result = live_raster();
@@ -212,6 +272,7 @@ int bridge_display_takeover(void) {
         // actual AP ownership are independently admitted by PMI8998WLED.
         record[0] = 1; record[4] = 3;
     }
+    retain_dsi(); // Optional path: preserve all mandatory DPU failure returns.
     bridge_puts("[Display handoff] post-EFI raster and pinned resources verified; LCD enabled\n");
     return 0;
 }

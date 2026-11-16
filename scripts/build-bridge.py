@@ -469,10 +469,9 @@ def configure_display_handoff(tree, path, smmu_handoff=False, disable_backlight=
     props['display-physical-height-mm'] = struct.pack('>I', height)
     props['display-uuid'] = identifier.encode() + b'\0'
 
-    # The vendor device tree ships the DSI controller and its panel disabled as
-    # well. Enabling only the DPU leaves QcomMIPIDSI and QcomPanel without a
-    # provider, and QcomDisplay links QcomMIPIDSI at load time, so the whole
-    # display stack silently fails to instantiate.
+    # Matching and bundle linkage are separate. Enable the DSI/panel providers
+    # and reserve fixed-size properties; only the runtime bridge can commit a
+    # retained display contract after checking the active firmware raster.
     def compatible_of(node):
         return node['props'].get('compatible', b'').split(b'\0')
 
@@ -485,14 +484,45 @@ def configure_display_handoff(tree, path, smmu_handoff=False, disable_backlight=
             visit_dsi(child)
 
     visit_dsi(tree)
+    used_handles = set()
+    def collect_handles(node):
+        for key in ('phandle', 'linux,phandle'):
+            raw = node['props'].get(key)
+            if raw:
+                if len(raw) != 4: raise ValueError('invalid display phandle')
+                used_handles.add(struct.unpack('>I', raw)[0])
+        for child in node['children']: collect_handles(child)
+    collect_handles(tree)
+    def ensure_handle(node):
+        raw = node['props'].get('phandle', node['props'].get('linux,phandle'))
+        if raw:
+            if not struct.unpack('>I', raw)[0]: raise ValueError('zero display phandle')
+        else:
+            handle = max(used_handles, default=0) + 1
+            if handle >= 0xffffffff: raise ValueError('display phandle exhausted')
+            used_handles.add(handle)
+            raw = struct.pack('>I', handle)
+        node['props']['phandle'] = raw
+        return raw
+    props['display-panel'] = bytes(4)  # Filled only for the verified active DSI.
     enabled_dsi = 0
     for dsi in dsi_nodes:
         panels = [c for c in dsi['children'] if b'qcom,dsi-panel' in compatible_of(c)]
         if not panels:
             continue
+        if len(panels) != 1 or panels[0]['props'].get('reg') != bytes(4):
+            raise ValueError('retained display requires exactly one panel at channel zero')
         dsi['props']['status'] = b'okay\0'
-        for panel in panels:
-            panel['props']['status'] = b'okay\0'
+        for name in ('qcom,dsi-handoff-version', 'qcom,dsi-handoff-flags', 'dsi-lanes',
+                     'qcom,dsi-byte-clock-hz', 'qcom,dsi-escape-clock-hz',
+                     'qcom,dsi-clock-valid-mask', 'qcom,dsi-retained-control',
+                     'qcom,dsi-bridge-status'):
+            dsi['props'][name] = bytes(4)
+        panel = panels[0]
+        panel['props']['status'] = b'okay\0'
+        panel['props']['panel-handoff-version'] = bytes(4)
+        panel['props']['panel-handoff-flags'] = bytes(4)
+        dsi['props']['qcom,dsi-panel'] = ensure_handle(panel)
         enabled_dsi += 1
     if enabled_dsi == 0:
         raise ValueError('display handoff requires a DSI controller with a panel child')
@@ -605,6 +635,8 @@ NUMERIC |= {'qcom,dsi-handoff-version', 'qcom,dsi-handoff-flags', 'dsi-lanes',
             'qcom,display-vsync-bit', 'display-width', 'display-height',
             'display-row-bytes', 'display-refresh-hz', 'display-panel', 'dot-pitch', 'canvas-width', 'canvas-height'}
 NUMERIC |= {'panel-handoff-version', 'panel-handoff-flags', 'panel-brightness-bits'}
+NUMERIC |= {'qcom,dsi-panel', 'qcom,dsi-clock-valid-mask', 'qcom,dsi-retained-control',
+            'qcom,dsi-bridge-status'}
 NUMERIC |= {'qcom,display-pingpong', 'display-physical-width-mm', 'display-physical-height-mm'}
 NUMERIC |= {'display-scale', 'display-rotation'}
 NUMERIC |= {'display-backlight', 'qcom,pmi8998-wled-handoff'}

@@ -65,6 +65,26 @@ int main() {
     PlatformContract c{1, 31, 4, 100000000, 19200000};
     assert(c.valid()); c.flags &= ~PlatformContract::PHYReady; assert(!c.valid());
     c.flags = 63; assert(c.valid()); c.lanes = 0; assert(!c.valid());
+    c = {2, PlatformContract::RetainedReadOnly, 4, 0, 0};
+    assert(c.valid() && c.retainedOnly()); // Unknown clocks are explicit, not fabricated.
+    c.flags |= PlatformContract::DMABypass; assert(!c.valid());
+    c.flags = 31; assert(!c.valid());
+    c = {1, 31, 4, 0, 0}; assert(!c.valid()); // v1 guarantees unchanged.
+    assert(enabledLanes(0xf1) == 4 && enabledLanes(0x71) == 3);
+    assert(enabledLanes(0x31) == 2 && enabledLanes(0x11) == 1);
+    assert(!enabledLanes(0x51) && !enabledLanes(1));
+    assert(retainedControlMatches(0x1f5, 0x1f5, 4));
+    assert(!retainedControlMatches(0x1f5, 0x1f4, 4));
+    assert(!retainedControlMatches(0x1f5, 0x175, 4));
+    assert(!retainedControlMatches(0x1f5, 0x1f7, 4));
+    assert(retainedRequestAllowed(0, true, 0x1f5));
+    assert(retainedRequestAllowed(2, false, 0x1f5));
+    assert(!retainedRequestAllowed(0, false, 0x1f5));
+    assert(!retainedRequestAllowed(2, true, 0x1f5));
+    for (unsigned kind : {1u, 3u, 4u, 5u}) {
+        assert(!retainedRequestAllowed(kind, false, 0x1f5));
+        assert(!retainedRequestAllowed(kind, true, 0x1f5));
+    }
     Registers regs;
     regs.values[Control / 4] = Enable | VideoEnable | 0x1f0;
     regs.values[InterruptControl / 4] = 1u << 17;

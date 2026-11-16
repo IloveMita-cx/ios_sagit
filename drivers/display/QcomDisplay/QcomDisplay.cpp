@@ -44,6 +44,7 @@ void QcomDisplay::Registers::write(uint32_t offset, uint32_t value) {
 }
 
 bool QcomDisplay::configure(IOService *p) {
+    p->setProperty("qcom,display-start-stage", "handoff-check");
     if (!displayProperty32(p, "qcom,display-handoff-version", contract.version) ||
         !displayProperty32(p, "qcom,display-handoff-flags", contract.flags) ||
         !displayProperty32(p, "qcom,display-interface", contract.interface) ||
@@ -62,12 +63,14 @@ bool QcomDisplay::configure(IOService *p) {
         (p->getDeviceMemoryCount() != 1 && p->getDeviceMemoryCount() != 3)) return false;
     if (contract.commandMode() && !displayProperty32(p, "qcom,display-pingpong", contract.pingPong)) return false;
     if (!contract.valid()) return false;
+    p->setProperty("qcom,display-start-stage", "map-mdp");
     mdpMap = p->mapDeviceMemoryWithIndex(0, kIOMapInhibitCache);
     if (!mdpMap || mdpMap->getLength() < 0x8f000) return false;
     regs.base = reinterpret_cast<volatile uint8_t *>(mdpMap->getVirtualAddress());
     // Admit the already configured firmware raster only. The scanout address
     // may be an IOVA: compare it with the explicit device address, and map only
     // the reserved physical carveout supplied by the loader for CPU access.
+    p->setProperty("qcom,display-start-stage", "raster-check");
     uint32_t source = contract.source == 0 ? 0x4000 : 0x24000;
     uint32_t size = mode.width | mode.height << 16;
     if (regs.read(source) != size || regs.read(source + 0x0c) != size ||
@@ -86,6 +89,7 @@ bool QcomDisplay::configure(IOService *p) {
     doubleBuffered = contract.flags & Display::PlatformContract::DoubleBufferMapped;
     if (doubleBuffered && (mode.framebufferSize < 2 * Display::bufferSpan(mode) ||
             scanoutDeviceAddress > UINT32_MAX - 2 * Display::bufferSpan(mode) + 1)) return false;
+    p->setProperty("qcom,display-start-stage", "map-scanout");
     scanoutMemory = IODeviceMemory::withRange(mode.framebufferAddress, mode.framebufferSize);
     if (!scanoutMemory) return false;
     scanoutMap = scanoutMemory->map(kIOMapWriteCombineCache);
@@ -105,6 +109,7 @@ bool QcomDisplay::configure(IOService *p) {
     uint32_t captureStatus = 0;
     displayProperty32(p, Display::MMU::StatusProperty, captureStatus);
     setProperty("DisplayMapperCaptureStatus", captureStatus, 32);
+    p->setProperty("qcom,display-start-stage", "panel-lookup");
     if (p->getProperty("display-panel")) {
         uint32_t identifier;
         if (!displayProperty32(p, "display-panel", identifier) || !identifier) return false;
@@ -122,6 +127,7 @@ bool QcomDisplay::configure(IOService *p) {
         if (!panelOpened || panel->callPlatformFunction("MIPIPanelPrepare", true,
                 nullptr, nullptr, nullptr, nullptr) != kIOReturnSuccess) return false;
     }
+    p->setProperty("qcom,display-start-stage", "backlight");
     if (!configureBacklight(p)) {
         /*
          * Development policy: the panel stays at the brightness the EDK2
@@ -195,20 +201,25 @@ bool QcomDisplay::start(IOService *provider) {
     int trace = 0;
     PE_parse_boot_argn("display-submit-trace", &trace, sizeof(trace));
     nativeTraceEnabled = scanoutCaptureEnabled && trace == 1;
+    provider->setProperty("qcom,display-start-stage", "provider-open");
     opened = provider->open(this);
     if (!opened || !configure(provider)) {
         IOLog("QcomDisplay: display resource initialization failed\n");
         releaseResources(); return false;
     }
+    provider->setProperty("qcom,display-start-stage", "super-start");
     if (!super::start(provider)) {
+        provider->setProperty("qcom,display-start-stage", "super-start-failed");
         stopFramework(provider);
         releaseResources(); return false;
     }
+    provider->setProperty("qcom,display-start-stage", "default-surface");
     if (!defaultSurface) {
         stopFramework(provider);
         releaseResources(); return false;
     }
     registerService();
+    provider->setProperty("qcom,display-start-stage", "start-complete");
     IOLog("QcomDisplay: iOS 18 IOMobileFramebufferLegacy, %ux%u @ %u Hz\n",
         mode.width, mode.height, mode.refreshHz);
     return true;

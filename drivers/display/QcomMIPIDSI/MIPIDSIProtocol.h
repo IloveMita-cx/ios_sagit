@@ -52,11 +52,37 @@ inline size_t packet(uint8_t *out, size_t capacity, uint8_t type,
     return bytes;
 }
 
+// CTRL.LANE0..3 are bits 4..7 (Linux v6.12 msm/registers/display/dsi.xml).
+// DSI6G adds the hardware-version word, placing CTRL at offset 0x004.
+inline unsigned enabledLanes(uint32_t control) {
+    switch ((control >> 4) & 15) {
+        case 1: return 1; case 3: return 2; case 7: return 3; case 15: return 4;
+        default: return 0; // Do not guess at a sparse or absent configuration.
+    }
+}
+inline bool retainedControlMatches(uint32_t observed, uint32_t current, unsigned lanes) {
+    const uint32_t mask = Enable | VideoEnable | CommandEnable | 0x1f0;
+    return (observed & Enable) && enabledLanes(observed) == lanes && lanes != 0 &&
+        (observed & mask) == (current & mask);
+}
+// An idempotent request can succeed without writing hardware; everything else
+// is unsupported in retained mode, including high-speed policy and commands.
+inline bool retainedRequestAllowed(unsigned kind, bool enable, uint32_t control) {
+    if (kind != 0 && kind != 2) return false;
+    return !!(control & (kind == 0 ? Enable : VideoEnable)) == enable;
+}
+
 struct PlatformContract {
     uint32_t version, flags, lanes, byteClockHz, escapeClockHz;
     enum : uint32_t { ClocksPinned = 1, PowerPinned = 2, PHYReady = 4,
         ResetReleased = 8, FirmwareQuiesced = 16, DMABypass = 32 };
+    // Version 2 means observation-only retention, not the five v1 readiness
+    // claims. Zero clock rates explicitly mean unavailable firmware reports;
+    // they cannot drive timing or DMA because those operations are forbidden.
+    enum : uint32_t { RetainedReadOnly = 64 };
+    bool retainedOnly() const { return version == 2 && flags == RetainedReadOnly; }
     bool valid() const {
+        if (retainedOnly()) return lanes >= 1 && lanes <= 4;
         return version == 1 && (flags & 31) == 31 && !(flags & ~63u) &&
             lanes >= 1 && lanes <= 4 && byteClockHz >= 1000000 &&
             byteClockHz <= 250000000 && escapeClockHz >= 1000000 &&

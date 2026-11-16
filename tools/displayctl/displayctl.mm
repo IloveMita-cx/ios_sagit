@@ -1042,20 +1042,19 @@ static int invalidateGestaltCache() {
         result, result ? saved : 0, backup.UTF8String, (unsigned long)before.length, scale);
     return result ? 1 : 0;
 }
-static bool hasDSICompatible(mach_port_t entry) {
-    constexpr char target[] = "qcom,msm8998-dsi-ctrl";
+static bool hasDSICompatible(mach_port_t entry, const char *target = "qcom,msm8998-dsi-ctrl") {
     CFTypeRef value = IORegistryEntryCreateCFProperty(entry, CFSTR("compatible"), nullptr, 0);
     if (!value) return false;
     bool matched = false;
     if (CFGetTypeID(value) == CFStringGetTypeID()) {
-        matched = CFEqual(value, CFSTR("qcom,msm8998-dsi-ctrl"));
+        matched = [(__bridge NSString *)value isEqualToString:[NSString stringWithUTF8String:target]];
     } else if (CFGetTypeID(value) == CFDataGetTypeID()) {
         const UInt8 *bytes = CFDataGetBytePtr((CFDataRef)value);
         const CFIndex length = CFDataGetLength((CFDataRef)value);
         for (CFIndex offset = 0; offset < length; ) {
             const UInt8 *end = static_cast<const UInt8 *>(memchr(bytes + offset, 0, length - offset));
             const CFIndex size = end ? end - (bytes + offset) : length - offset;
-            if (size == sizeof(target) - 1 && !memcmp(bytes + offset, target, size)) {
+            if (size == (CFIndex)strlen(target) && !memcmp(bytes + offset, target, size)) {
                 matched = true;
                 break;
             }
@@ -1073,7 +1072,10 @@ static void reportDSIProvider(mach_port_t entry, const char *plane) {
     for (NSString *key in @[@"name", @"compatible", @"status", @"reg", @"IOClass", @"IONameMatched",
                             @"qcom,dsi-handoff-version", @"qcom,dsi-handoff-flags", @"dsi-lanes",
                             @"qcom,dsi-byte-clock-hz", @"qcom,dsi-escape-clock-hz",
-                            @"qcom,dsi-handoff-readable-mask", @"qcom,dsi-start-stage"]) {
+                            @"qcom,dsi-handoff-readable-mask", @"qcom,dsi-start-stage",
+                            @"qcom,dsi-bridge-status", @"qcom,dsi-clock-valid-mask", @"qcom,dsi-retained-control",
+                            @"qcom,dsi-panel", @"AAPL,phandle", @"panel-handoff-version", @"panel-handoff-flags",
+                            @"qcom,panel-start-stage", @"display-panel", @"qcom,display-start-stage"]) {
         CFTypeRef value = IORegistryEntryCreateCFProperty(entry, (__bridge CFStringRef)key, nullptr, 0);
         printf("DISPLAY_DSI_PROPERTY key=%s value=%s\n", key.UTF8String,
                value ? [[(__bridge id)value description] UTF8String] : "(none)");
@@ -1103,6 +1105,9 @@ static void reportDSIProviders() {
                 if (hasDSICompatible(entry)) {
                     ++count;
                     reportDSIProvider(entry, "IODeviceTree");
+                } else if (hasDSICompatible(entry, "qcom,dsi-panel") ||
+                           hasDSICompatible(entry, "qcom,msm8998-dpu")) {
+                    reportDSIProvider(entry, "IODeviceTree-display-panel");
                 }
                 IOObjectRelease(entry);
             }
@@ -1149,7 +1154,8 @@ static void registry() {
                     @"Width", @"Height", @"RowBytes", @"PixelFormat", @"Location", @"IOMFBDisplayRefresh",
                     @"BacklightStateValid", @"BacklightLastError", @"DisplayBrightness", @"DisplayAppliedBrightness",
                     @"DisplayBacklightPower", @"DisplayPowerTransitionError", @"PanelReady", @"MDP Double Buffered",
-                    @"BacklightPower", @"BacklightBrightness", @"BacklightAppliedBrightness", @"NativeBrightnessRequestCount"]) {
+                    @"BacklightPower", @"BacklightBrightness", @"BacklightAppliedBrightness", @"NativeBrightnessRequestCount",
+                    @"MIPIDSI Retained Read Only", @"MIPIDSI Commands Available", @"MIPIDSI Lanes", @"MIPIDSI Byte Clock"]) {
                 CFTypeRef value = IORegistryEntryCreateCFProperty(service, (__bridge CFStringRef)key, nullptr, 0);
                 if (value) {
                     NSString *description = [(__bridge id)value description];

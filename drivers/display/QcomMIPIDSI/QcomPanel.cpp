@@ -30,18 +30,24 @@ bool QcomPanel::initializeSequence(const uint8_t *bytes, size_t size) {
     return true;
 }
 bool QcomPanel::start(IOService *p) {
+    const auto stage = [p](const char *s) { p->setProperty("qcom,panel-start-stage", s); };
+    stage("handoff-check");
     uint32_t version, flags, identifier;
     if (!displayProperty32(p, "panel-handoff-version", version) || version != 1 ||
         !displayProperty32(p, "panel-handoff-flags", flags) || (flags != 3 && flags != 5) ||
         !displayProperty32(p, "AAPL,phandle", identifier) || !identifier) return false;
+    stage("super-start");
     device = OSDynamicCast(AppleARMMIPIDSIDevice, p);
     if (!device || !super::start(p)) return false;
+    stage("open-and-command-gate");
     opened = device->open(this);
     workLoop = IOWorkLoop::workLoop();
     gate = IOCommandGate::commandGate(this, brightnessAction);
     if (!opened || !workLoop || !gate || workLoop->addEventSource(gate) != kIOReturnSuccess) goto fail;
     added = true;
+    stage("enable-retained-interface");
     if (device->enableInterface(true) != kIOReturnSuccess) goto fail;
+    stage("panel-sequence");
     if (flags == 5) {
         auto sequence = OSDynamicCast(OSData, p->getProperty("panel-init-sequence"));
         if (!sequence || !initializeSequence(static_cast<const uint8_t *>(sequence->getBytesNoCopy()), sequence->getLength())) goto fail;
@@ -52,7 +58,9 @@ bool QcomPanel::start(IOService *p) {
     ready = true;
     setProperty("DisplayPanelIdentifier", identifier, 32);
     setProperty("PanelReady", true);
+    stage("register-service");
     registerService();
+    stage("start-complete");
     return true;
 fail:
     releaseResources(); super::stop(p); return false;

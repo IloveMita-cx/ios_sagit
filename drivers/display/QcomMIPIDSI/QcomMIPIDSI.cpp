@@ -42,6 +42,7 @@ bool QcomMIPIDSI::start(IOService *provider) {
         IOLog("QcomMIPIDSI: clock/power/PHY handoff is missing or invalid\n");
         return false;
     }
+    retainedOnly = c.retainedOnly();
     stage("super-start");
     if (!super::start(provider)) {
         stage("super-start-failed");
@@ -58,6 +59,13 @@ bool QcomMIPIDSI::start(IOService *provider) {
     if (!MIPIDSI::controller6G(regs.read(MIPIDSI::LegacyVersion), regs.read(MIPIDSI::ShiftedVersion),
             regs.read(MIPIDSI::HardwareVersion)) ||
         (regs.read(MIPIDSI::Status) & MIPIDSI::DMAActive)) goto fail;
+    if (retainedOnly) {
+        stage("retained-control-check");
+        uint32_t observed = 0, committed = 0;
+        if (!displayProperty32(provider, "qcom,dsi-bridge-status", committed) || committed != 1 ||
+            !displayProperty32(provider, "qcom,dsi-retained-control", observed) ||
+            !MIPIDSI::retainedControlMatches(observed, regs.read(MIPIDSI::Control), c.lanes)) goto fail;
+    } else {
     stage("dma-mapper");
     mapper = IOMapper::copyMapperForDevice(provider);
     if (!mapper && !(c.flags & MIPIDSI::PlatformContract::DMABypass)) goto fail;
@@ -80,12 +88,15 @@ bool QcomMIPIDSI::start(IOService *provider) {
             segment.fIOVMAddr > UINT32_MAX - (MIPIDSI::CommandBufferSize - 1)) goto fail;
         commandAddress = segment.fIOVMAddr;
     }
+    } // Full command transport alone owns a mapper, DMA command and buffer.
     stage("command-gate");
     workLoop = IOWorkLoop::workLoop();
     gate = IOCommandGate::commandGate(this, action);
     if (!workLoop || !gate || workLoop->addEventSource(gate) != kIOReturnSuccess) goto fail;
     gateAdded = true;
     running = true;
+    setProperty("MIPIDSI Retained Read Only", retainedOnly);
+    setProperty("MIPIDSI Commands Available", !retainedOnly);
     setProperty("MIPIDSI Lanes", c.lanes, 32);
     setProperty("MIPIDSI Byte Clock", c.byteClockHz, 32);
     stage("publish-below");
@@ -149,6 +160,10 @@ IOReturn QcomMIPIDSI::action(OSObject *owner, void *arg, void *, void *, void *)
 }
 IOReturn QcomMIPIDSI::perform(Operation &op) {
     if (!running || dmaPinned) return kIOReturnNotReady;
+    if (retainedOnly) {
+        return MIPIDSI::retainedRequestAllowed(op.kind, op.enable, regs.read(MIPIDSI::Control))
+            ? kIOReturnSuccess : kIOReturnUnsupported;
+    }
     if (op.kind < 3) {
         if (op.kind == 1) { highSpeed = op.enable; return kIOReturnSuccess; }
         uint32_t mask = op.kind == 0 ? MIPIDSI::Enable : MIPIDSI::VideoEnable;
@@ -180,6 +195,7 @@ IOReturn QcomMIPIDSI::perform(Operation &op) {
     return transfer(op.type, op.data, op.length, false);
 }
 IOReturn QcomMIPIDSI::transfer(UInt8 type, const UInt8 *data, UInt64 length, bool read) {
+    if (retainedOnly) return kIOReturnUnsupported;
     if (length > MIPIDSI::MaxPayload) return kIOReturnBadArgument;
     unsigned size = MIPIDSI::packet(static_cast<uint8_t *>(commandMemory->getBytesNoCopy()),
         MIPIDSI::CommandBufferSize, type, data, length, read);
