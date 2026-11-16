@@ -195,7 +195,7 @@ static uint32_t read32(const unsigned char *p) {
 }
 static unsigned char *slot(const char *node, const char *key) {
     uint32_t size;
-    unsigned char *p = dt_property(display_tree,node,key,&size);
+    unsigned char *p = (unsigned char *)dt_property(display_tree,node,key,&size);
     return p && size == 4 ? p : 0;
 }
 static void retain_dsi(void) {
@@ -213,9 +213,9 @@ static void retain_dsi(void) {
     uint32_t identifier = read32(p[7]), size;
     void *panel = identifier ? dt_find_phandle(display_tree,identifier) : 0;
     if (!panel) return;
-    unsigned char *pv = dt_node_property(panel,"panel-handoff-version",&size);
+    unsigned char *pv = (unsigned char *)dt_node_property(panel,"panel-handoff-version",&size);
     if (!pv || size != 4) return;
-    unsigned char *pf = dt_node_property(panel,"panel-handoff-flags",&size);
+    unsigned char *pf = (unsigned char *)dt_node_property(panel,"panel-handoff-flags",&size);
     if (!pf || size != 4) return;
     unsigned char *dp = slot("display-controller@c901000","display-panel");
     if (!dp) return;
