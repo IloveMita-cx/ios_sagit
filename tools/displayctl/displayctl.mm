@@ -1042,8 +1042,98 @@ static int invalidateGestaltCache() {
         result, result ? saved : 0, backup.UTF8String, (unsigned long)before.length, scale);
     return result ? 1 : 0;
 }
+static bool hasDSICompatible(mach_port_t entry) {
+    constexpr char target[] = "qcom,msm8998-dsi-ctrl";
+    CFTypeRef value = IORegistryEntryCreateCFProperty(entry, CFSTR("compatible"), nullptr, 0);
+    if (!value) return false;
+    bool matched = false;
+    if (CFGetTypeID(value) == CFStringGetTypeID()) {
+        matched = CFEqual(value, CFSTR("qcom,msm8998-dsi-ctrl"));
+    } else if (CFGetTypeID(value) == CFDataGetTypeID()) {
+        const UInt8 *bytes = CFDataGetBytePtr((CFDataRef)value);
+        const CFIndex length = CFDataGetLength((CFDataRef)value);
+        for (CFIndex offset = 0; offset < length; ) {
+            const UInt8 *end = static_cast<const UInt8 *>(memchr(bytes + offset, 0, length - offset));
+            const CFIndex size = end ? end - (bytes + offset) : length - offset;
+            if (size == sizeof(target) - 1 && !memcmp(bytes + offset, target, size)) {
+                matched = true;
+                break;
+            }
+            offset += size + 1;
+        }
+    }
+    CFRelease(value);
+    return matched;
+}
+
+static void reportDSIProvider(mach_port_t entry, const char *plane) {
+    uint64_t identifier = 0;
+    kern_return_t result = IORegistryEntryGetRegistryEntryID(entry, &identifier);
+    printf("DISPLAY_DSI_PROVIDER plane=%s id=%llu id_result=0x%x\n", plane, identifier, result);
+    for (NSString *key in @[@"name", @"compatible", @"status", @"reg", @"IOClass", @"IONameMatched",
+                            @"qcom,dsi-handoff-version", @"qcom,dsi-handoff-flags", @"dsi-lanes",
+                            @"qcom,dsi-byte-clock-hz", @"qcom,dsi-escape-clock-hz",
+                            @"qcom,dsi-handoff-readable-mask", @"qcom,dsi-start-stage"]) {
+        CFTypeRef value = IORegistryEntryCreateCFProperty(entry, (__bridge CFStringRef)key, nullptr, 0);
+        printf("DISPLAY_DSI_PROPERTY key=%s value=%s\n", key.UTF8String,
+               value ? [[(__bridge id)value description] UTF8String] : "(none)");
+        if (value) CFRelease(value);
+    }
+}
+
+static void reportDSIProviders() {
+    // Keep these APIs optional so the ordinary registry probe still works
+    // when the firmware cannot expose a given plane or name-matching helper.
+    using CreateIterator = kern_return_t (*)(mach_port_t, const char *, uint32_t, mach_port_t *);
+    auto create = reinterpret_cast<CreateIterator>(dlsym(RTLD_DEFAULT, "IORegistryCreateIterator"));
+    using NameMatching = CFMutableDictionaryRef (*)(const char *);
+    auto byName = reinterpret_cast<NameMatching>(dlsym(RTLD_DEFAULT, "IOServiceNameMatching"));
+    if (create) {
+        mach_port_t iterator = 0;
+        constexpr uint32_t iterateRecursively = 1;
+        const kern_return_t result = create(0, "IODeviceTree", iterateRecursively, &iterator);
+        printf("DISPLAY_DSI_SCAN plane=IODeviceTree result=0x%x\n", result);
+        if (!result) {
+            unsigned count = 0, scanned = 0;
+            constexpr unsigned scanLimit = 8192;
+            while (scanned < scanLimit) {
+                mach_port_t entry = IOIteratorNext(iterator);
+                if (!entry) break;
+                ++scanned;
+                if (hasDSICompatible(entry)) {
+                    ++count;
+                    reportDSIProvider(entry, "IODeviceTree");
+                }
+                IOObjectRelease(entry);
+            }
+            IOObjectRelease(iterator);
+            printf("DISPLAY_DSI_COUNT plane=IODeviceTree count=%u scanned=%u bounded=%u\n",
+                   count, scanned, scanned == scanLimit);
+        }
+    } else puts("DISPLAY_DSI_SCAN plane=IODeviceTree unavailable");
+    CFMutableDictionaryRef matching = byName ? byName("qcom,msm8998-dsi-ctrl") : nullptr;
+    if (!matching) {
+        puts("DISPLAY_DSI_SCAN plane=IOService unavailable");
+        return;
+    }
+    CFDictionarySetValue(matching, CFSTR("IOProviderClass"), CFSTR("AppleARMIODevice"));
+    mach_port_t iterator = 0;
+    const kern_return_t result = IOServiceGetMatchingServices(0, matching, &iterator);
+    printf("DISPLAY_DSI_SCAN plane=IOService result=0x%x\n", result);
+    if (result) return;
+    unsigned count = 0;
+    for (mach_port_t entry; (entry = IOIteratorNext(iterator)); ) {
+        ++count;
+        reportDSIProvider(entry, "IOService");
+        IOObjectRelease(entry);
+    }
+    IOObjectRelease(iterator);
+    printf("DISPLAY_DSI_COUNT plane=IOService count=%u\n", count);
+}
+
 static void registry() {
     chosenDisplayScale();
+    reportDSIProviders();
     const char *classes[] = {"IOMobileFramebuffer", "IOMobileFramebufferLegacy", "IOSurfaceRoot", "AppleARMMIPIDSIController", "AppleARMMIPIDSIDevice", "QcomMIPIDSI", "QcomPanel", "QcomDisplay", "PMI8998WLED", "AppleKeyStore"};
     for (const char *name : classes) {
         mach_port_t iterator = 0;

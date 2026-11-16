@@ -19,31 +19,55 @@ void QcomMIPIDSI::Registers::write(uint32_t offset, uint32_t value) {
 void QcomMIPIDSI::Registers::delay(unsigned us) { IODelay(us); }
 
 bool QcomMIPIDSI::start(IOService *provider) {
+    const auto stage = [provider](const char *value) {
+        provider->setProperty("qcom,dsi-start-stage", value);
+    };
+    stage("entered");
     MIPIDSI::PlatformContract c{};
-    if (!displayProperty32(provider, "qcom,dsi-handoff-version", c.version) ||
-        !displayProperty32(provider, "qcom,dsi-handoff-flags", c.flags) ||
-        !displayProperty32(provider, "dsi-lanes", c.lanes) ||
-        !displayProperty32(provider, "qcom,dsi-byte-clock-hz", c.byteClockHz) ||
-        !displayProperty32(provider, "qcom,dsi-escape-clock-hz", c.escapeClockHz) || !c.valid()) {
+    struct HandoffProperty { const char *key; uint32_t *value; };
+    const HandoffProperty handoff[] = {
+        {"qcom,dsi-handoff-version", &c.version},
+        {"qcom,dsi-handoff-flags", &c.flags},
+        {"dsi-lanes", &c.lanes},
+        {"qcom,dsi-byte-clock-hz", &c.byteClockHz},
+        {"qcom,dsi-escape-clock-hz", &c.escapeClockHz},
+    };
+    uint32_t readable = 0;
+    for (unsigned i = 0; i < sizeof(handoff) / sizeof(handoff[0]); ++i)
+        if (displayProperty32(provider, handoff[i].key, *handoff[i].value))
+            readable |= 1u << i;
+    provider->setProperty("qcom,dsi-handoff-readable-mask", readable, 32);
+    if (readable != 0x1f || !c.valid()) {
+        stage(readable != 0x1f ? "handoff-property-unreadable" : "handoff-invalid");
         IOLog("QcomMIPIDSI: clock/power/PHY handoff is missing or invalid\n");
         return false;
     }
-    if (!super::start(provider)) return false;
+    stage("super-start");
+    if (!super::start(provider)) {
+        stage("super-start-failed");
+        return false;
+    }
+    stage("provider-open");
     opened = provider->open(this);
     if (!opened || provider->getDeviceMemoryCount() != 1) goto fail;
+    stage("memory-map");
     map = provider->mapDeviceMemoryWithIndex(0, kIOMapInhibitCache);
     if (!map || map->getLength() < 0x200) goto fail;
     regs.base = reinterpret_cast<volatile uint8_t *>(map->getVirtualAddress());
+    stage("controller-check");
     if (!MIPIDSI::controller6G(regs.read(MIPIDSI::LegacyVersion), regs.read(MIPIDSI::ShiftedVersion),
             regs.read(MIPIDSI::HardwareVersion)) ||
         (regs.read(MIPIDSI::Status) & MIPIDSI::DMAActive)) goto fail;
+    stage("dma-mapper");
     mapper = IOMapper::copyMapperForDevice(provider);
     if (!mapper && !(c.flags & MIPIDSI::PlatformContract::DMABypass)) goto fail;
+    stage("command-buffer");
     commandMemory = IOBufferMemoryDescriptor::inTaskWithPhysicalMask(kernel_task,
         kIODirectionOut | kIOMemoryPhysicallyContiguous | kIOMemoryMapperNone |
         kIOMapInhibitCache, MIPIDSI::CommandBufferSize, 0xfffff000ULL);
     if (!commandMemory || commandMemory->prepare(kIODirectionOut) != kIOReturnSuccess) goto fail;
     prepared = true;
+    stage("dma-command");
     dma = IODMACommand::withSpecification(IODMACommand::OutputHost64, 32,
         MIPIDSI::CommandBufferSize, mapper ? IODMACommand::kMapped : IODMACommand::kUnmapped,
         MIPIDSI::CommandBufferSize, 4096, mapper);
@@ -56,6 +80,7 @@ bool QcomMIPIDSI::start(IOService *provider) {
             segment.fIOVMAddr > UINT32_MAX - (MIPIDSI::CommandBufferSize - 1)) goto fail;
         commandAddress = segment.fIOVMAddr;
     }
+    stage("command-gate");
     workLoop = IOWorkLoop::workLoop();
     gate = IOCommandGate::commandGate(this, action);
     if (!workLoop || !gate || workLoop->addEventSource(gate) != kIOReturnSuccess) goto fail;
@@ -63,8 +88,11 @@ bool QcomMIPIDSI::start(IOService *provider) {
     running = true;
     setProperty("MIPIDSI Lanes", c.lanes, 32);
     setProperty("MIPIDSI Byte Clock", c.byteClockHz, 32);
+    stage("publish-below");
     publishBelow(provider); // Native AppleARMMIPIDSIDevice nubs and matching.
+    stage("register-service");
     registerService();
+    stage("start-complete");
     return true;
 fail:
     releaseResources();
