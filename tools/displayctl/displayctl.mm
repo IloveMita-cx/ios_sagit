@@ -1075,7 +1075,8 @@ static void reportDSIProvider(mach_port_t entry, const char *plane) {
                             @"qcom,dsi-handoff-readable-mask", @"qcom,dsi-start-stage",
                             @"qcom,dsi-bridge-status", @"qcom,dsi-clock-valid-mask", @"qcom,dsi-retained-control",
                             @"qcom,dsi-panel", @"AAPL,phandle", @"panel-handoff-version", @"panel-handoff-flags",
-                            @"qcom,panel-start-stage", @"display-panel", @"qcom,display-start-stage"]) {
+                            @"qcom,panel-start-stage", @"display-panel", @"qcom,display-start-stage",
+                            @"qcom,display-hw-stage", @"qcom,display-resources-ready"]) {
         CFTypeRef value = IORegistryEntryCreateCFProperty(entry, (__bridge CFStringRef)key, nullptr, 0);
         printf("DISPLAY_DSI_PROPERTY key=%s value=%s\n", key.UTF8String,
                value ? [[(__bridge id)value description] UTF8String] : "(none)");

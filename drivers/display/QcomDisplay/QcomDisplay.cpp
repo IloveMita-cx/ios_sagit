@@ -201,12 +201,20 @@ bool QcomDisplay::start(IOService *provider) {
     int trace = 0;
     PE_parse_boot_argn("display-submit-trace", &trace, sizeof(trace));
     nativeTraceEnabled = scanoutCaptureEnabled && trace == 1;
+    resourcesReady = false;
+    provider->setProperty("qcom,display-resources-ready", false);
+    provider->setProperty("qcom,display-hw-stage", "not-entered");
     provider->setProperty("qcom,display-start-stage", "provider-open");
     opened = provider->open(this);
     if (!opened || !configure(provider)) {
         IOLog("QcomDisplay: display resource initialization failed\n");
         releaseResources(); return false;
     }
+    // configure() has validated and mapped the retained raster and acquired
+    // the panel. Native start invokes our hardware/identity/surface callbacks,
+    // all of which require this flag. Cleanup clears it on every failure.
+    resourcesReady = true;
+    provider->setProperty("qcom,display-resources-ready", true);
     provider->setProperty("qcom,display-start-stage", "super-start");
     if (!super::start(provider)) {
         provider->setProperty("qcom,display-start-stage", "super-start-failed");
@@ -226,6 +234,10 @@ bool QcomDisplay::start(IOService *provider) {
 }
 
 bool QcomDisplay::start_hardware() {
+    const auto stage = [this](const char *value) {
+        getProvider()->setProperty("qcom,display-hw-stage", value);
+    };
+    stage("resources-check");
     IOLog("QcomDisplay: start_hardware ready=%u surface-root=%p\n", resourcesReady, nativeState<IOSurfaceRoot *>(SurfaceRoot));
     if (!resourcesReady) return false;
     nativeState<UInt32>(NativeWidth) = mode.width;
@@ -236,7 +248,9 @@ bool QcomDisplay::start_hardware() {
     // requires Apple's PurpleGfxMem region, while our surface uses ordinary
     // IOSurface memory. Publish readiness only after our setup succeeds.
     nativeState<UInt8>(DisplayReady) = 0;
+    stage("native-swap-templates");
     super::create_default_fb_surface();
+    stage("verify-swap-templates");
     const size_t templateOffsets[] = {DefaultTransaction, EmptyTransaction};
     for (size_t offset : templateOffsets) {
         UInt32 changed = nativeState<UInt32>(offset + 0x14c);
@@ -251,25 +265,32 @@ bool QcomDisplay::start_hardware() {
     if (scanoutCaptureEnabled)
         kprintf("QcomDisplay: native swap templates initialized count=2 changed=ffffffff ready=ffffffff\n");
     nativeState<UInt8>(MainDisplay) = 1;
+    stage("default-surface");
     create_default_fb_surface();
     if (!defaultSurface) { IOLog("QcomDisplay: default IOSurface creation failed\n"); return false; }
+    stage("work-loop");
     IOWorkLoop *loop = getWorkLoop();
     if (!loop) { IOLog("QcomDisplay: native work loop unavailable\n"); return false; }
     frameworkLoop = loop;
     frameworkLoop->retain();
+    stage("allocate-event-sources");
     gate = IOCommandGate::commandGate(this);
     if(scanoutCaptureEnabled)timeline=IONewZero(Display::TimelineRing,1);
     interrupt = timeline ? IOFilterInterruptEventSource::filterInterruptEventSource(this,interruptAction,interruptFilter,getProvider(),0) :
         IOInterruptEventSource::interruptEventSource(this, interruptAction, getProvider(), 0);
     timeout = IOTimerEventSource::timerEventSource(this, timeoutAction);
     if (!loop || !gate || !interrupt || !timeout) { IOLog("QcomDisplay: event-source allocation failed\n"); return false; }
+    stage("attach-gate");
     if (loop->addEventSource(gate) != kIOReturnSuccess) return false;
     gateAdded = true;
+    stage("attach-interrupt");
     if (loop->addEventSource(interrupt) != kIOReturnSuccess) return false;
     interruptAdded = true;
+    stage("attach-timer");
     if (loop->addEventSource(timeout) != kIOReturnSuccess) return false;
     timerAdded = true;
     if (contract.commandMode()) {
+    stage("adopt-command-transfer");
         Display::CommandTransfer<Registers> transfer(regs,contract.pingPong,mode.height);
         if (!transfer.adopt([](unsigned us){IODelay(us);})) {
             IOLog("QcomDisplay: firmware command transfer did not drain; native scanout disabled\n");
@@ -281,6 +302,7 @@ bool QcomDisplay::start_hardware() {
         if (scanoutCaptureEnabled)
             kprintf("QcomDisplay: command single-transfer enabled pp=%u auto=0 tear=1 drained=1\n",contract.pingPong);
     }
+    stage("optional-display-mapper");
     if (directRequested && !displayMapper) {
         ownedMapper = QcomDisplayMapper::create(this, getProvider(), mode, scanoutDeviceAddress);
         if (ownedMapper) displayMapper = IOMapper::copyMapperForDevice(getProvider());
@@ -290,7 +312,9 @@ bool QcomDisplay::start_hardware() {
     }
     // Native start() publishes the service before returning. Its matching
     // clients must see identity/capabilities on their first notification.
+    stage("publish-display-properties");
     if (!publishDisplayProperties()) { IOLog("QcomDisplay: display property publication failed\n"); return false; }
+    stage("enable-interrupt");
     savedInterruptEnable = regs.read(Display::InterruptEnable);
     uint32_t bit = contract.ownedInterrupts();
     regs.write(Display::InterruptClear, bit);
@@ -303,6 +327,7 @@ bool QcomDisplay::start_hardware() {
     // Both states retain the handed-off raster/rails/clocks. State 0 applies
     // WLED blanking; it cannot stop DMA or cancel a latched native transaction.
     nativeState<UInt8>(NativePMInitialized) = 1;
+    stage("power-registration");
     PMinit(); pmStarted = true;
     static IOPMPowerState states[2] = {
         {1, 0, kIOPMPowerOn, kIOPMPowerOn, 0, 0, 0, 0, 0, 0, 0, 0},
@@ -315,7 +340,9 @@ bool QcomDisplay::start_hardware() {
         return false;
     }
     nativeState<UInt8>(DisplayReady) = 1;
+    stage("power-on");
     changePowerStateTo(1);
+    stage("start-complete");
     return true;
 }
 
@@ -1444,6 +1471,7 @@ void QcomDisplay::stop_hardware_gated() {
     if (resourcesReady && backlightClaimed) { /* diagnostic: keep backlight on */ }
     displayVisible = false;
     resourcesReady = false;
+    if (getProvider()) getProvider()->setProperty("qcom,display-resources-ready", false);
     if (interrupt) interrupt->disable();
     if (irqEnabled) {
         uint32_t bit = contract.ownedInterrupts();
@@ -1467,6 +1495,7 @@ void QcomDisplay::displayMapperFault() {
 void QcomDisplay::releaseResources() {
     stopPowerManagement();
     resourcesReady = false;
+    if (getProvider()) getProvider()->setProperty("qcom,display-resources-ready", false);
     IOWorkLoop *loop = frameworkLoop;
     if (loop && timerAdded) { loop->removeEventSource(timeout); timerAdded = false; }
     if (loop && interruptAdded) { loop->removeEventSource(interrupt); interruptAdded = false; }
