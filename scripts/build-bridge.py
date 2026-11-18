@@ -644,6 +644,7 @@ NUMERIC |= {'#gpio-cells', 'qcom,owned-gpios', 'qcom,owned-irqs', 'qcom,button-m
 NUMERIC |= {'power-gpios', 'reset-gpios', 'irq-gpios'}
 NUMERIC |= {'qcom,i2c-handoff', 'synaptics,touch-handoff', 'touchscreen-rotation'}
 NUMERIC.add('qcom,cpu-osm-handoff')
+NUMERIC.add('home-button-type')
 NUMERIC |= {'xnu,allow-no-uart', 'qcom,geni-console-handoff'}
 NUMERIC |= {'qcom,spi-handoff', 'spi-max-frequency', 'spi-mode', 'gyro,mount'}
 NUMERIC |= {'qcom,rpm-handoff-version', 'qcom,usb-smmu-capture', 'qcom,usb-dma-capture', 'qcom,usb-firmware-physical32'}

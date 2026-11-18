@@ -15,6 +15,13 @@
     };
     // Backed by the volatile CHRP snapshot passed inline in chosen by the bridge.
     options {};
+    // The physical Home sensor is broken. Advertise software navigation.
+    buttons {
+        compatible = "buttons";
+        device_type = "buttons";
+        button-names = "hold", "voldown", "volup";
+        home-button-type = <2>;
+    };
     aliases { serial0 = &uart8; };
     // Placeholder: the bridge replaces this with its firmware-allocated arena.
     memory@a0000000 { device_type = "memory"; reg = <0 0xa0000000 0 0>; };

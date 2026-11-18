@@ -499,6 +499,17 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+      - name: Build input diagnostics
+        run: python3 scripts/toolchain.py build-input-client
+
+      - name: Upload input diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: input-client
+          path: build/output/inputctl
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Build XnuBridge.efi
         run: |
           # 用手机里已装 ios.apfs 的 UUID（584B947F-），而不是本轮新构建的随机 UUID，
@@ -508,6 +519,8 @@ jobs:
           if [ -f ci/launchd.plist.sig ]; then TRUST_FLAGS="$TRUST_FLAGS --trust-file ci/launchd.plist.sig"; fi
           if [ -f ci/bash ]; then TRUST_FLAGS="$TRUST_FLAGS --trust-file ci/bash"; fi
           if [ -f build/output/displayctl ]; then TRUST_FLAGS="$TRUST_FLAGS --trust-file build/output/displayctl"; fi
+          test -s build/output/inputctl
+          TRUST_FLAGS="$TRUST_FLAGS --trust-file build/output/inputctl"
           for lib in ci/dylibs/*.dylib; do if [ -f "$lib" ]; then TRUST_FLAGS="$TRUST_FLAGS --trust-file $lib"; fi; done
           echo "trust flags: [$TRUST_FLAGS]"
           echo "display_pipe_alias input = [${{ inputs.display_pipe_alias }}]"

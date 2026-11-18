@@ -212,8 +212,45 @@ static int monitor(unsigned seconds) {
     printf("INPUT_MONITOR done events=%u digitizers=%u\n",eventCount,digitizerCount);
     return 0;
 }
+// Resolve the native settings object's actual Objective-C signatures before
+// invoking it. Unsupported firmware reports failure rather than writing a
+// guessed preference key. Run this command in the mobile user's context.
+static int enableAssistiveTouch() {
+    alarm(20);
+    if(geteuid()==0 && (setgid(501) || setuid(501))) {
+        perror("ACCESSIBILITY mobile credentials");return 1;
+    }
+    if(geteuid()!=501){puts("ACCESSIBILITY wrong_user");return 1;}
+    dlopen("/System/Library/PrivateFrameworks/AccessibilityUtilities.framework/AccessibilityUtilities",RTLD_NOW);
+    Class cls=NSClassFromString(@"AXSettings");
+    SEL shared=NSSelectorFromString(@"sharedInstance");
+    if(!cls || ![cls respondsToSelector:shared]){puts("ACCESSIBILITY settings_unavailable");return 1;}
+    NSMethodSignature *factory=[cls methodSignatureForSelector:shared];
+    if(!factory || factory.numberOfArguments!=2 || strcmp(factory.methodReturnType,"@"))return 1;
+    NSInvocation *make=[NSInvocation invocationWithMethodSignature:factory];
+    make.target=cls;make.selector=shared;[make invoke];
+    __unsafe_unretained id settings=nil;[make getReturnValue:&settings];
+    SEL get=NSSelectorFromString(@"assistiveTouchEnabled"),set=NSSelectorFromString(@"setAssistiveTouchEnabled:");
+    NSMethodSignature *gs=[settings methodSignatureForSelector:get],*ss=[settings methodSignatureForSelector:set];
+    if(!gs || !ss || gs.numberOfArguments!=2 || ss.numberOfArguments!=3 ||
+       (strcmp(gs.methodReturnType,"B") && strcmp(gs.methodReturnType,"c")) ||
+       strcmp(ss.methodReturnType,"v") ||
+       (strcmp([ss getArgumentTypeAtIndex:2],"B") && strcmp([ss getArgumentTypeAtIndex:2],"c"))) {
+        puts("ACCESSIBILITY unsupported_settings_ABI");return 1;
+    }
+    NSInvocation *read=[NSInvocation invocationWithMethodSignature:gs];
+    read.target=settings;read.selector=get;[read invoke];
+    unsigned char before=0,after=0;[read getReturnValue:&before];
+    NSInvocation *write=[NSInvocation invocationWithMethodSignature:ss];
+    write.target=settings;write.selector=set;unsigned char enabled=1;
+    [write setArgument:&enabled atIndex:2];[write invoke];
+    [read invoke];[read getReturnValue:&after];
+    printf("ACCESSIBILITY assistive_touch_before=%u after=%u ui_visibility=unverified\n",before,after);
+    return after?0:1;
+}
 int main(int argc,const char *argv[]) {
     @autoreleasepool {
+        if(argc==2 && !strcmp(argv[1],"enable-assistive-touch"))return enableAssistiveTouch();
         if(argc==2 && !strcmp(argv[1],"system"))return systemState();
         if(argc==2 && !strcmp(argv[1],"delivery"))return deliveryState();
         if(argc==4 && !strcmp(argv[1],"tap")) {
