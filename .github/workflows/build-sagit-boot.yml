@@ -526,6 +526,7 @@ jobs:
           echo "display_pipe_alias input = [${{ inputs.display_pipe_alias }}]"
           python3 scripts/build-bridge.py \
             --kernel build/output/kernelcache.sdm835.display-runtime \
+            --touch-handoff-profile docs/touch/handoff-template.json --touch-prepare \
             --apfs-report ci-phone-apfs.json \
             --firmware-report build/apfs/prepared-firmware.json \
             --trust-cache build/ufs-mount/preboot/cryptex1/current/os.dmg.trustcache \

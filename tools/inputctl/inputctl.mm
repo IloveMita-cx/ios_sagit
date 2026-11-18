@@ -217,6 +217,9 @@ static int monitor(unsigned seconds) {
 // guessed preference key. Run this command in the mobile user's context.
 static int enableAssistiveTouch() {
     alarm(20);
+    setenv("HOME","/var/mobile",1);
+    setenv("CFFIXED_USER_HOME","/var/mobile",1);
+    setenv("USER","mobile",1);setenv("LOGNAME","mobile",1);
     if(geteuid()==0 && (setgid(501) || setuid(501))) {
         perror("ACCESSIBILITY mobile credentials");return 1;
     }
@@ -244,6 +247,10 @@ static int enableAssistiveTouch() {
     NSInvocation *write=[NSInvocation invocationWithMethodSignature:ss];
     write.target=settings;write.selector=set;unsigned char enabled=1;
     [write setArgument:&enabled atIndex:2];[write invoke];
+    // Allow the native asynchronous preference write and notification to run.
+    [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:3.0]];
+    printf("ACCESSIBILITY uid=%u home=%s sync=%u\n",getuid(),getenv("HOME"),
+           CFPreferencesAppSynchronize(CFSTR("com.apple.Accessibility")));
     [read invoke];[read getReturnValue:&after];
     printf("ACCESSIBILITY assistive_touch_before=%u after=%u ui_visibility=unverified\n",before,after);
     return after?0:1;

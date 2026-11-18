@@ -1598,7 +1598,11 @@
         "org.darwin.driver.GenericAES",
         "org.darwin.driver.QcomWatchdog",
         "org.darwin.driver.QcomMIPIDSI",
-        "org.darwin.driver.QcomDisplay"
+        "org.darwin.driver.QcomDisplay",
+        "org.darwin.driver.QcomGPIO",
+        "org.darwin.driver.QcomI2C",
+        "org.darwin.driver.SynapticsTouch",
+        "com.apple.iokit.IOHIDEventDriver"
       ],
       "output": "../build/output/kernelcache.sdm835.display-runtime",
       "tests": [
@@ -1610,7 +1614,10 @@
         "rtc",
         "watchdog",
         "mipi-dsi",
-        "display"
+        "display",
+        "gpio",
+        "i2c",
+        "touch"
       ]
     },
     "usb": {
