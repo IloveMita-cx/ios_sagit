@@ -49,6 +49,7 @@ static void receiveEvent(void *,void *,void *,InputEvent event) {
     const auto type=IOHIDEventGetType(event);
     if(type!=11) return;
     ++digitizerCount;
+    if(compactEvents && digitizerCount>96 && digitizerCount%128!=0)return;
     if(compactEvents) {
         printf("INPUT_FRAME n=%u timestamp=%llu now=%llu sender=%llu mask=%lld range=%lld touch=%lld x=%.6f y=%.6f",
             digitizerCount,(unsigned long long)IOHIDEventGetTimeStamp(event),(unsigned long long)mach_absolute_time(),
