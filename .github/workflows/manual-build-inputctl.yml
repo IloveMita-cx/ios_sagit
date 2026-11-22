@@ -42,11 +42,24 @@ jobs:
             sudo apt-get install -y --no-install-recommends "$p" || echo "::warning::optional package $p unavailable"
           done
 
+      - name: Install LLVM 23 (ld64.lld)
+        continue-on-error: true
+        run: |
+          set -eux
+          echo "151.101.198.49 apt.llvm.org" | sudo tee -a /etc/hosts
+          sudo apt-get install -y --no-install-recommends software-properties-common gnupg
+          curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/llvm.gpg
+          echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/noble/ llvm-toolchain-noble-23 main" | sudo tee /etc/apt/sources.list.d/llvm23.list
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends llvm-23 llvm-23-dev clang-23 lld-23
+
       - name: Bootstrap toolchain (downloads iPhoneOS SDK + cctools)
         run: make bootstrap JOBS=$JOBS 2>&1 | tee -a "$RUNNER_TEMP/bootstrap.log"
 
       - name: Build inputctl
-        run: python3 scripts/toolchain.py build-input-client 2>&1 | tee -a "$RUNNER_TEMP/inputctl.log"
+        run: |
+          export PATH="/usr/lib/llvm-23/bin:$PATH"
+          python3 scripts/toolchain.py build-input-client 2>&1 | tee -a "$RUNNER_TEMP/inputctl.log"
 
       - name: Upload inputctl
         if: always()
