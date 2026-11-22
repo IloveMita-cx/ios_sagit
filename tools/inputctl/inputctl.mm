@@ -117,6 +117,25 @@ static int deliveryState() {
         printf("INPUT_DELIVERY_ERROR %s\n",error.reason.UTF8String);alarm(0);return 1;
     }
 }
+}
+static int homeButtonType() {
+    alarm(15);
+    typedef long(*EffectiveHomeButtonTypeFn)(void);
+    const char *paths[]={
+        "/System/Library/PrivateFrameworks/SpringBoardFoundation.framework/SpringBoardFoundation",
+        "/System/Library/PrivateFrameworks/FrontBoard.framework/FrontBoard"};
+    for(const char *p:paths){
+        void *lib=dlopen(p,RTLD_LAZY);
+        if(!lib)continue;
+        auto fn=(EffectiveHomeButtonTypeFn)dlsym(lib,"SBFEffectiveHomeButtonType");
+        if(!fn)continue;
+        long value=fn();
+        printf("HOME_BUTTON_TYPE value=%ld framework=%s\n",value,p);
+        alarm(0);return 0;
+    }
+    puts("HOME_BUTTON_TYPE symbol_unavailable");
+    alarm(0);return 1;
+}
 static int tap(double x,double y) {
     if(geteuid() || !isfinite(x) || !isfinite(y) || x<0 || x>1 || y<0 || y>1)return 2;
     alarm(15);
@@ -261,6 +280,7 @@ int main(int argc,const char *argv[]) {
         if(argc==2 && !strcmp(argv[1],"enable-assistive-touch"))return enableAssistiveTouch();
         if(argc==2 && !strcmp(argv[1],"system"))return systemState();
         if(argc==2 && !strcmp(argv[1],"delivery"))return deliveryState();
+        if(argc==2 && !strcmp(argv[1],"homebutton"))return homeButtonType();
         if(argc==4 && !strcmp(argv[1],"tap")) {
             char *xEnd=nullptr,*yEnd=nullptr;const auto x=strtod(argv[2],&xEnd),y=strtod(argv[3],&yEnd);
             if(!*argv[2] || !*argv[3] || *xEnd || *yEnd)return 2;
