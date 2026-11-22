@@ -514,7 +514,7 @@ jobs:
           if [ -f ci/launchd.plist.sig ]; then TRUST_FLAGS="$TRUST_FLAGS --trust-file ci/launchd.plist.sig"; fi
           if [ -f ci/bash ]; then TRUST_FLAGS="$TRUST_FLAGS --trust-file ci/bash"; fi
           if [ -f build/output/displayctl ]; then TRUST_FLAGS="$TRUST_FLAGS --trust-file build/output/displayctl"; fi
-if [ -f build/output/inputctl ]; then TRUST_FLAGS="$TRUST_FLAGS --trust-file build/output/inputctl"; fi
+          if [ -f build/output/inputctl ]; then TRUST_FLAGS="$TRUST_FLAGS --trust-file build/output/inputctl"; fi
           for lib in ci/dylibs/*.dylib; do if [ -f "$lib" ]; then TRUST_FLAGS="$TRUST_FLAGS --trust-file $lib"; fi; done
           echo "trust flags: [$TRUST_FLAGS]"
           echo "display_pipe_alias input = [${{ inputs.display_pipe_alias }}]"
