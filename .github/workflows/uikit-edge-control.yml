@@ -1,0 +1,129 @@
+name: UIKit edge gesture control
+on:
+  push:
+    branches: [diagnostics/uikit-edge-control-nov23]
+permissions:
+  contents: read
+jobs:
+  simulator:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - name: Generate isolated test project
+        shell: bash
+        run: |
+          set -eu
+          command -v xcodegen || brew install xcodegen
+          mkdir App Tests
+          cat > project.yml <<'PROJECT'
+          name: EdgeControl
+          options:
+            bundleIdPrefix: local.hackios
+          targets:
+            EdgeControl:
+              type: application
+              platform: iOS
+              deploymentTarget: "17.0"
+              sources: [App]
+              settings:
+                GENERATE_INFOPLIST_FILE: YES
+                PRODUCT_BUNDLE_IDENTIFIER: local.hackios.EdgeControl
+            EdgeControlUITests:
+              type: bundle.ui-testing
+              platform: iOS
+              deploymentTarget: "17.0"
+              sources: [Tests]
+              dependencies:
+                - target: EdgeControl
+              settings:
+                GENERATE_INFOPLIST_FILE: YES
+                TEST_TARGET_NAME: EdgeControl
+          schemes:
+            EdgeControl:
+              build:
+                targets:
+                  EdgeControl: all
+              test:
+                targets: [EdgeControlUITests]
+          PROJECT
+          cat > App/Main.swift <<'SWIFT'
+          import UIKit
+          @main final class App: UIResponder, UIApplicationDelegate {
+              var window: UIWindow?
+              func application(_ app: UIApplication, didFinishLaunchingWithOptions options: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+                  let window = UIWindow(frame: UIScreen.main.bounds)
+                  window.rootViewController = Screen()
+                  self.window = window
+                  window.makeKeyAndVisible()
+                  return true
+              }
+          }
+          final class Screen: UIViewController {
+              let label = UILabel()
+              override var preferredScreenEdgesDeferringSystemGestures: UIRectEdge { .bottom }
+              override func viewDidLoad() {
+                  super.viewDidLoad()
+                  view.backgroundColor = .white
+                  label.frame = CGRect(x: 10, y: 120, width: 350, height: 70)
+                  label.accessibilityIdentifier = "state"
+                  label.text = "ready"
+                  view.addSubview(label)
+                  let pan = UIScreenEdgePanGestureRecognizer(target: self, action: #selector(track(_:)))
+                  pan.edges = .bottom
+                  view.addGestureRecognizer(pan)
+              }
+              @objc func track(_ pan: UIScreenEdgePanGestureRecognizer) {
+                  switch pan.state {
+                  case .began:
+                      label.text = "began"
+                      if ProcessInfo.processInfo.arguments.contains("cancel-on-begin") { pan.isEnabled = false }
+                  case .ended: label.text = "ended"
+                  case .cancelled: label.text = "cancelled"
+                  default: break
+                  }
+              }
+          }
+          SWIFT
+          cat > Tests/Edge.swift <<'SWIFT'
+          import XCTest
+          final class Edge: XCTestCase {
+              func check(_ expected: String, cancel: Bool) {
+                  let app = XCUIApplication()
+                  if cancel { app.launchArguments = ["cancel-on-begin"] }
+                  app.launch()
+                  let label = app.staticTexts["state"]
+                  XCTAssertTrue(label.waitForExistence(timeout: 10))
+                  let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.995))
+                  let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4))
+                  from.press(forDuration: 0.1, thenDragTo: to)
+                  XCTAssertEqual(label.label, expected)
+              }
+              func testEnded() { check("ended", cancel: false) }
+              func testCancelled() { check("cancelled", cancel: true) }
+          }
+          SWIFT
+          xcodegen generate
+      - name: Run gesture controls
+        shell: bash
+        run: |
+          set -eo pipefail
+          id=$(xcrun simctl list devices available -j | python3 -c 'import sys,json; print(next(d["udid"] for k,v in sorted(json.load(sys.stdin)["devices"].items(), reverse=True) if "iOS" in k for d in v if "iPhone" in d["name"]))')
+          echo "$id" > sim-id.txt
+          xcodebuild -project EdgeControl.xcodeproj -scheme EdgeControl -destination "platform=iOS Simulator,id=$id" -parallel-testing-enabled NO -resultBundlePath Edge.xcresult test
+      - name: Collect UIKit gesture messages for comparison
+        if: always()
+        shell: bash
+        run: |
+          if [ -s sim-id.txt ]; then
+            id=$(cat sim-id.txt)
+            xcrun simctl boot "$id" || true
+            xcrun simctl bootstatus "$id" -b
+            xcrun simctl spawn "$id" log show --last 20m --info --debug --style compact --predicate 'process == "EdgeControl" AND subsystem == "com.apple.UIKit"' > UIKit.log
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: edge-control-result
+          path: |
+            Edge.xcresult
+            UIKit.log
