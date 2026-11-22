@@ -117,7 +117,6 @@ static int deliveryState() {
         printf("INPUT_DELIVERY_ERROR %s\n",error.reason.UTF8String);alarm(0);return 1;
     }
 }
-}
 static int homeButtonType() {
     alarm(15);
     typedef long(*EffectiveHomeButtonTypeFn)(void);
