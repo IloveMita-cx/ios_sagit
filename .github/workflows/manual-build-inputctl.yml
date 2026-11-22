@@ -1,0 +1,58 @@
+name: manual-build-inputctl
+
+# 独立手动构建：只编译 inputctl（含 homebutton 命令），上传 artifact。
+# 不编译内核、不打 boot 镜像、不下载 IPSW。
+
+on:
+  workflow_dispatch:
+
+env:
+  JOBS: "4"
+
+concurrency:
+  group: manual-build-inputctl-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash -eo pipefail {0}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --fix-missing --no-install-recommends \
+            build-essential cmake ninja-build git curl ca-certificates \
+            flex bison m4 autoconf automake libtool patch perl \
+            python3 python3-pip python3-venv \
+            llvm clang lld llvm-dev \
+            libfuse3-dev zlib1g-dev libfdt-dev uuid-dev \
+            device-tree-compiler pkg-config \
+            gettext xxd unzip zip rsync
+          for p in libssl-dev libbz2-dev liblzma-dev libzstd-dev libedit-dev; do
+            sudo apt-get install -y --no-install-recommends "$p" || echo "::warning::optional package $p unavailable"
+          done
+
+      - name: Bootstrap toolchain (downloads iPhoneOS SDK + cctools)
+        run: make bootstrap JOBS=$JOBS 2>&1 | tee -a "$RUNNER_TEMP/bootstrap.log"
+
+      - name: Build inputctl
+        run: python3 scripts/toolchain.py build-input-client 2>&1 | tee -a "$RUNNER_TEMP/inputctl.log"
+
+      - name: Upload inputctl
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: inputctl
+          path: build/output/inputctl
+          if-no-files-found: warn
+          retention-days: 14
