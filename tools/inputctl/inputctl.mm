@@ -274,12 +274,44 @@ static int enableAssistiveTouch() {
     printf("ACCESSIBILITY assistive_touch_before=%u after=%u ui_visibility=unverified\n",before,after);
     return after?0:1;
 }
+static NSString *svcProp(io_service_t service, const char *key) {
+    auto v = IORegistryEntryCreateCFProperty(service, (__bridge CFStringRef)[NSString stringWithUTF8String:key], kCFAllocatorDefault, 0);
+    if (!v) return @"-";
+    NSString *s = [(__bridge id)v description];
+    CFRelease(v);
+    return s;
+}
+static int rawSample(unsigned seconds) {
+    if (geteuid()) return 2;
+    alarm((unsigned)(seconds + 10));
+    mach_port_t iterator=0;
+    if (IOServiceGetMatchingServices(0,IOServiceMatching("SynapticsTouch"),&iterator)) return 1;
+    auto service=IOIteratorNext(iterator);IOObjectRelease(iterator);
+    if (!service) return 1;
+    printf("INPUT_RAWSAMPLE ready seconds=%u\n",seconds);
+    fflush(stdout);
+    const auto until=CFAbsoluteTimeGetCurrent()+seconds;
+    unsigned n=0;
+    while (CFAbsoluteTimeGetCurrent()<until) {
+        CFRunLoopRunInMode(kCFRunLoopDefaultMode,0.05,false);
+        ++n;
+        printf("INPUT_RAWSAMPLE n=%u contacts=%s down=%s up=%s raw=%s status=%s\n",
+            n, svcProp(service,"TouchContacts").UTF8String, svcProp(service,"TouchDownTransitions").UTF8String,
+            svcProp(service,"TouchUpTransitions").UTF8String, svcProp(service,"RMILastRawFrame").UTF8String,
+            svcProp(service,"RMILastStatus").UTF8String);
+        fflush(stdout);
+    }
+    IOObjectRelease(service);
+    alarm(0);
+    return 0;
+}
 int main(int argc,const char *argv[]) {
     @autoreleasepool {
         if(argc==2 && !strcmp(argv[1],"enable-assistive-touch"))return enableAssistiveTouch();
         if(argc==2 && !strcmp(argv[1],"system"))return systemState();
         if(argc==2 && !strcmp(argv[1],"delivery"))return deliveryState();
         if(argc==2 && !strcmp(argv[1],"homebutton"))return homeButtonType();
+        if(argc==3 && !strcmp(argv[1],"raw-sample")) { char *e=nullptr; const auto s=strtoul(argv[2],&e,10); if(!*argv[2] || *e || !s || s>60) return 2; return rawSample((unsigned)s); }
         if(argc==4 && !strcmp(argv[1],"tap")) {
             char *xEnd=nullptr,*yEnd=nullptr;const auto x=strtod(argv[2],&xEnd),y=strtod(argv[3],&yEnd);
             if(!*argv[2] || !*argv[3] || *xEnd || *yEnd)return 2;
