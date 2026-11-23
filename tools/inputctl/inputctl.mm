@@ -274,7 +274,7 @@ static int enableAssistiveTouch() {
     printf("ACCESSIBILITY assistive_touch_before=%u after=%u ui_visibility=unverified\n",before,after);
     return after?0:1;
 }
-static NSString *svcProp(io_service_t service, const char *key) {
+static NSString *svcProp(mach_port_t service, const char *key) {
     auto v = IORegistryEntryCreateCFProperty(service, (__bridge CFStringRef)[NSString stringWithUTF8String:key], kCFAllocatorDefault, 0);
     if (!v) return @"-";
     NSString *s = [(__bridge id)v description];
