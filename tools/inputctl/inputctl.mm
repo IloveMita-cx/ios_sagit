@@ -50,6 +50,18 @@ static void receiveEvent(void *,void *,void *,InputEvent event) {
     const auto type=IOHIDEventGetType(event);
     if(type!=11) return;
     ++digitizerCount;
+    if (digitizerCount == 1) {
+        printf("INPUT_FIELDS");
+        for (int fi = 720896; fi <= 720928; ++fi) printf(" %d=%lld", fi, (long long)IOHIDEventGetIntegerValue(event, fi));
+        auto kids0 = IOHIDEventGetChildren(event);
+        if (kids0 && CFArrayGetCount(kids0)) {
+            auto kid = (InputEvent)CFArrayGetValueAtIndex(kids0, 0);
+            printf(" | KID");
+            for (int fi = 720896; fi <= 720928; ++fi) printf(" %d=%lld", fi, (long long)IOHIDEventGetIntegerValue(kid, fi));
+        }
+        printf("\n");
+        fflush(stdout);
+    }
     if(compactEvents && digitizerCount>96 && digitizerCount%128!=0)return;
     if(compactEvents) {
         printf("INPUT_FRAME n=%u timestamp=%llu now=%llu sender=%llu mask=%lld range=%lld touch=%lld x=%.6f y=%.6f",
