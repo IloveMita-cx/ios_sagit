@@ -22,6 +22,7 @@ typedef const void *InputEvent;
 InputEventClient IOHIDEventSystemClientCreateWithType(CFAllocatorRef,int,CFDictionaryRef);
 void IOHIDEventSystemClientRegisterEventCallback(InputEventClient,void (*)(void *,void *,void *,InputEvent),void *,void *);
 void IOHIDEventSystemClientScheduleWithRunLoop(InputEventClient,CFRunLoopRef,CFStringRef);
+void IOHIDEventSystemClientSetMatching(InputEventClient,CFDictionaryRef);
 void IOHIDEventSystemClientUnscheduleWithRunLoop(InputEventClient,CFRunLoopRef,CFStringRef);
 CFArrayRef IOHIDEventSystemClientCopyServices(InputEventClient);
 CFTypeRef IOHIDEventSystemClientCopyProperty(InputEventClient,CFStringRef);
@@ -305,12 +306,41 @@ static int rawSample(unsigned seconds) {
     alarm(0);
     return 0;
 }
+static int clientMatch(unsigned seconds) {
+    if (geteuid()) return 2;
+    alarm((unsigned)(seconds + 10));
+    auto client = IOHIDEventSystemClientCreateWithType(kCFAllocatorDefault, 0, nullptr);
+    if (!client) { puts("INPUT_MATCH no_client"); return 1; }
+    CFMutableDictionaryRef m = CFDictionaryCreateMutable(kCFAllocatorDefault, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int page = 13, usage = 4;
+    CFNumberRef np = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &page);
+    CFNumberRef nu = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &usage);
+    CFDictionarySetValue(m, CFSTR("PrimaryUsagePage"), np);
+    CFDictionarySetValue(m, CFSTR("PrimaryUsage"), nu);
+    IOHIDEventSystemClientSetMatching(client, m);
+    CFRelease(np); CFRelease(nu); CFRelease(m);
+    IOHIDEventSystemClientRegisterEventCallback(client, receiveEvent, nullptr, nullptr);
+    IOHIDEventSystemClientScheduleWithRunLoop(client, CFRunLoopGetCurrent(), kCFRunLoopDefaultMode);
+    auto services = IOHIDEventSystemClientCopyServices(client);
+    printf("INPUT_MATCH ready seconds=%u matched_services=%ld\n", seconds, services ? (long)CFArrayGetCount(services) : -1L);
+    if (services) CFRelease(services);
+    fflush(stdout);
+    const auto until = CFAbsoluteTimeGetCurrent() + seconds;
+    while (CFAbsoluteTimeGetCurrent() < until) CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.05, false);
+    IOHIDEventSystemClientUnscheduleWithRunLoop(client, CFRunLoopGetCurrent(), kCFRunLoopDefaultMode);
+    printf("INPUT_MATCH done events=%u digitizers=%u\n", eventCount, digitizerCount);
+    CFRelease(client);
+    alarm(0);
+    return 0;
+}
 int main(int argc,const char *argv[]) {
     @autoreleasepool {
         if(argc==2 && !strcmp(argv[1],"enable-assistive-touch"))return enableAssistiveTouch();
         if(argc==2 && !strcmp(argv[1],"system"))return systemState();
         if(argc==2 && !strcmp(argv[1],"delivery"))return deliveryState();
         if(argc==2 && !strcmp(argv[1],"homebutton"))return homeButtonType();
+        if(argc==2 && !strcmp(argv[1],"client-match")) return clientMatch(12);
         if(argc==3 && !strcmp(argv[1],"raw-sample")) { char *e=nullptr; const auto s=strtoul(argv[2],&e,10); if(!*argv[2] || *e || !s || s>60) return 2; return rawSample((unsigned)s); }
         if(argc==4 && !strcmp(argv[1],"tap")) {
             char *xEnd=nullptr,*yEnd=nullptr;const auto x=strtod(argv[2],&xEnd),y=strtod(argv[3],&yEnd);
