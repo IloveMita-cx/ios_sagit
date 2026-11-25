@@ -346,6 +346,32 @@ static int clientMatch(unsigned seconds) {
     alarm(0);
     return 0;
 }
+static int makeDir(const char *path) {
+    if (geteuid()) return 2;
+    char buf[1024];
+    snprintf(buf, sizeof buf, "%s", path);
+    for (char *p = buf + 1; *p; ++p) {
+        if (*p == '/') { *p = 0; mkdir(buf, 0755); *p = '/'; }
+    }
+    if (mkdir(buf, 0755) && errno != EEXIST) { perror("mkdir"); return 1; }
+    return 0;
+}
+static int copyFile(const char *src, const char *dst) {
+    if (geteuid()) return 2;
+    int in = open(src, O_RDONLY);
+    if (in < 0) { perror("open"); return 1; }
+    int out = open(dst, O_WRONLY | O_CREAT | O_TRUNC, 0755);
+    if (out < 0) { perror("create"); close(in); return 1; }
+    char buf[65536];
+    ssize_t n;
+    while ((n = read(in, buf, sizeof buf)) > 0) {
+        if (write(out, buf, n) != n) { perror("write"); close(in); close(out); return 1; }
+    }
+    close(in);
+    close(out);
+    chmod(dst, 0755);
+    return 0;
+}
 int main(int argc,const char *argv[]) {
     @autoreleasepool {
         if(argc==2 && !strcmp(argv[1],"enable-assistive-touch"))return enableAssistiveTouch();
@@ -353,6 +379,8 @@ int main(int argc,const char *argv[]) {
         if(argc==2 && !strcmp(argv[1],"delivery"))return deliveryState();
         if(argc==2 && !strcmp(argv[1],"homebutton"))return homeButtonType();
         if(argc==2 && !strcmp(argv[1],"client-match")) return clientMatch(12);
+        if(argc==3 && !strcmp(argv[1],"mkdir")) return makeDir(argv[2]);
+        if(argc==4 && !strcmp(argv[1],"cp")) return copyFile(argv[2],argv[3]);
         if(argc==3 && !strcmp(argv[1],"raw-sample")) { char *e=nullptr; const auto s=strtoul(argv[2],&e,10); if(!*argv[2] || *e || !s || s>60) return 2; return rawSample((unsigned)s); }
         if(argc==4 && !strcmp(argv[1],"tap")) {
             char *xEnd=nullptr,*yEnd=nullptr;const auto x=strtod(argv[2],&xEnd),y=strtod(argv[3],&yEnd);
