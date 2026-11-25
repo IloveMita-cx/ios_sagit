@@ -11,6 +11,9 @@
 #include <objc/runtime.h>
 #include <signal.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <errno.h>
 #include <mach/mach_time.h>
 #include <math.h>
 
