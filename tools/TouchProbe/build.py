@@ -13,8 +13,16 @@ import toolchain
 
 if not list((toolchain.TOOLS / "sdk/iPhoneOS18.6.sdk/System/Library/Frameworks/UIKit.framework").rglob("UIKit.tbd")):
     raise SystemExit("Missing UIKit.tbd in tools/sdk/iPhoneOS18.6.sdk. Check the user SDK.")
+ENTITLEMENTS = {
+    "com.apple.QuartzCore.displayable-context": True,
+    "com.apple.QuartzCore.secure-mode": True,
+    "com.apple.QuartzCore.display-state": True,
+    "platform-application": True,
+}
 toolchain.build_iokit_client("TouchProbe", [str(here / "TouchProbe.mm")],
-                             frameworks=["Foundation", "UIKit"], adhoc_sign=True)
+                             frameworks=["Foundation", "UIKit"],
+                             entitlements=ENTITLEMENTS,
+                             signing_identifier="org.darwin.development.touchprobe")
 bundle = toolchain.BUILD / "output/TouchProbe.app"
 bundle.mkdir(exist_ok=True)
 shutil.copy2(toolchain.BUILD / "output/TouchProbe", bundle / "TouchProbe")
