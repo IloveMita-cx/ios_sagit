@@ -96,6 +96,10 @@ static void swizzle(const char *cls, const char *original, const char *replaceme
     if (m && r) method_exchangeImplementations(m, r);
 }
 
+// The loadable-dylib link path exports exactly one symbol named
+// <ToolName>_struct; keep that contract while the real entry point is the
+// constructor below.
+extern "C" void TouchHook_struct(void) {}
 __attribute__((constructor)) static void install(void) {
     char path[256];
     snprintf(path, sizeof path, "/private/var/tmp/hook-%d.log", getpid());
