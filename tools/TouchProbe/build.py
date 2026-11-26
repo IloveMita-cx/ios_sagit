@@ -17,7 +17,6 @@ ENTITLEMENTS = {
     "com.apple.QuartzCore.displayable-context": True,
     "com.apple.QuartzCore.secure-mode": True,
     "com.apple.QuartzCore.display-state": True,
-    "platform-application": True,
 }
 toolchain.build_iokit_client("TouchProbe", [str(here / "TouchProbe.mm")],
                              frameworks=["Foundation", "UIKit"],
