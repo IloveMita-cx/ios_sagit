@@ -1,4 +1,4 @@
-﻿name: build-sagit-boot
+﻿﻿name: build-sagit-boot
 
 # 在 GitHub 的 Linux runner 上构建小米 6 (sagit / msm8998) 的 iPadOS 18 引导镜像。
 # 产物: boot-sagit.img —— 可直接 fastboot boot，不写分区。
@@ -521,6 +521,17 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Build TouchHook dylib
+        run: python3 tools/TouchHook/build.py
+
+      - name: Upload TouchHook dylib
+        uses: actions/upload-artifact@v4
+        with:
+          name: touch-hook
+          path: build/output/TouchHook.dylib
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Build XnuBridge.efi
         run: |
           # 用手机里已装 ios.apfs 的 UUID（584B947F-），而不是本轮新构建的随机 UUID，
@@ -533,6 +544,7 @@ jobs:
           test -s build/output/inputctl
           TRUST_FLAGS="$TRUST_FLAGS --trust-file build/output/inputctl"
           if [ -f build/output/TouchProbe.app/TouchProbe ]; then TRUST_FLAGS="$TRUST_FLAGS --trust-file build/output/TouchProbe.app/TouchProbe"; fi
+          if [ -f build/output/TouchHook.dylib ]; then TRUST_FLAGS="$TRUST_FLAGS --trust-file build/output/TouchHook.dylib"; fi
           for lib in ci/dylibs/*.dylib; do if [ -f "$lib" ]; then TRUST_FLAGS="$TRUST_FLAGS --trust-file $lib"; fi; done
           echo "trust flags: [$TRUST_FLAGS]"
           echo "display_pipe_alias input = [${{ inputs.display_pipe_alias }}]"
