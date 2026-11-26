@@ -30,7 +30,13 @@ NATIVE_TOOL_ENTITLEMENTS = {
         'com.apple.QuartzCore.global-capture',
         'com.apple.QuartzCore.secure-capture',
     }),
-    # This diagnostic uses task_read_for_pid only to verify the live Setup
+    # TouchProbe is a UIKit app-start diagnostic; it needs the same per-process
+    # display rights QuartzCore checks before BKSDisplayServicesStart succeeds.
+    'org.darwin.development.touchprobe': frozenset({
+        'com.apple.QuartzCore.displayable-context',
+        'com.apple.QuartzCore.secure-mode',
+        'com.apple.QuartzCore.display-state',
+    }),    # This diagnostic uses task_read_for_pid only to verify the live Setup
     # singleton and patched instructions. It never executes or writes remotely.
     'org.darwin.development.uipatchctl': frozenset({
         'task_for_pid-allow',
