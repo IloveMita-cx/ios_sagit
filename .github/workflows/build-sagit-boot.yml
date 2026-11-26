@@ -1,4 +1,4 @@
-﻿﻿name: build-sagit-boot
+name: build-sagit-boot
 
 # 在 GitHub 的 Linux runner 上构建小米 6 (sagit / msm8998) 的 iPadOS 18 引导镜像。
 # 产物: boot-sagit.img —— 可直接 fastboot boot，不写分区。
