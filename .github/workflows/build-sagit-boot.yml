@@ -468,7 +468,7 @@ jobs:
           cd build/apfs
           TAG="apfs-run${{ github.run_number }}"
           gh release delete "$TAG" --yes 2>/dev/null || true
-          gh release create "$TAG" --title "iPadOS APFS image (run ${{ github.run_number }})" \
+          gh release create "$TAG" --draft --title "iPadOS APFS image (run ${{ github.run_number }})" \
             --notes "ios.apfs.zst 切片。合并: cat ios.apfs.zst.part* > ios.apfs.zst; 解压: zstd -d ios.apfs.zst" \
             || true
           gh release upload "$TAG" ios.apfs.zst.part* --clobber || true
