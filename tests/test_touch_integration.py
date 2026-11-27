@@ -151,7 +151,7 @@ class TouchIntegrationTests(unittest.TestCase):
         self.assertEqual(event['CFBundleIdentifier'], 'com.apple.iokit.IOHIDFamily')
         self.assertEqual(event['IOProviderClass'], 'IOHIDInterface')
         self.assertEqual(event['DeviceUsagePairs'], [{'DeviceUsagePage': 13, 'DeviceUsage': 4}])
-        self.assertTrue(event['DigitizerCollectionDispatch'])
+        self.assertNotIn('DigitizerCollectionDispatch', event)
         self.assertTrue(event['DisplayIntegrated'])
         self.assertEqual(info['IOKitPersonalities']['SynapticsTouch']['IOProviderClass'], 'GenericI2CDevice')
         self.assertIn('org.darwin.driver.GenericI2C', info['OSBundleLibraries'])
