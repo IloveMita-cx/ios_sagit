@@ -77,6 +77,7 @@ bool SynapticsTouch::handleStart(IOService *provider) {
     // service wrappers.
     setProperty("MT Built-In",true);
     setProperty("HIDDefaultBehavior","");
+    setProperty("DigitizerCollectionDispatch",true);
     setProperty("DisplayIntegrated",true);
     setProperty("HIDInputReportBytes",TouchHID::ReportBytes,32);
     setProperty("RMIProductID",fSensor.product);
