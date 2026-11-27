@@ -84,8 +84,6 @@
 			<integer>10000</integer>
 			<key>HIDDefaultBehavior</key>
 			<string></string>
-			<key>DigitizerCollectionDispatch</key>
-			<true/>
 			<key>DisplayIntegrated</key>
 			<true/>
 		</dict>
