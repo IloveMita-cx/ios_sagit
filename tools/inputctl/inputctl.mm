@@ -15,6 +15,8 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <mach/mach_time.h>
+#include <initializer_list>
+#include <TouchDiagnosticGesture.h>
 #include <math.h>
 
 // Apple IOHIDEventSystemMonitor and HIDEventSystemClient.h define this
