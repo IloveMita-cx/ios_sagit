@@ -48,12 +48,22 @@ void IOHIDEventSystemClientDispatchEvent(InputEventClient,InputEvent);
 }
 static unsigned eventCount=0,digitizerCount=0;
 static bool compactEvents=false;
-// If the capture window closes while a gesture is still down, the sampler must
-// report an incomplete sample instead of silently ending.
+// Gesture sampler state lives at file scope so both the natural end of the
+// capture window and a terminating signal can report an unfinished gesture.
+static int sampleActive = 0;
+static unsigned long sampleN = 0, moveLines = 0;
+static long long sampleIdx = -1;
+static unsigned long long sampleSender = 0;
+
+static void sampleEnd(const char *why, int complete) {
+    printf("INPUT_SAMPLE_END n=%lu complete=%d released=%d moves=%lu by=%s\n",
+           sampleN, complete, complete ? 1 : 0, moveLines, why);
+    fflush(stdout);
+    sampleActive = 0;
+}
 static void samplerEnd(int sig) {
     (void)sig;
-    fprintf(stdout, "INPUT_SAMPLE_END complete=0 released=0 by=signal\n");
-    fflush(stdout);
+    if (sampleActive) sampleEnd("signal", 0);
     _exit(0);
 }
 static void receiveEvent(void *,void *,void *,InputEvent event) {
@@ -62,10 +72,7 @@ static void receiveEvent(void *,void *,void *,InputEvent event) {
     if(type!=11) return;
     ++digitizerCount;
     {
-        static int sampling = 0, sawRelease = 0;
-        static unsigned long sampleN = 0, moveLines = 0;
-        static long long activeIdx = -1;
-        static unsigned long long activeSender = 0;
+
         auto kids = IOHIDEventGetChildren(event);
         long kidsTotal = kids ? (long)CFArrayGetCount(kids) : 0;
         long fingers = 0;
@@ -83,11 +90,11 @@ static void receiveEvent(void *,void *,void *,InputEvent event) {
         unsigned long long ts = IOHIDEventGetTimeStamp(event);
         double sx = IOHIDEventGetFloatValue(event, 720896);
         double sy = IOHIDEventGetFloatValue(event, 720897);
-        if (!sampling && touch == 1) {
-            sampling = 1; sawRelease = 0; sampleN = 0; moveLines = 0;
-            activeIdx = idx; activeSender = sender;
+        if (!sampleActive && touch == 1) {
+            sampleActive = 1; sampleN = 0; moveLines = 0;
+            sampleIdx = idx; sampleSender = sender;
         }
-        if (sampling && sender == activeSender && idx == activeIdx) {
+        if (sampleActive && sender == sampleSender && idx == sampleIdx) {
             ++sampleN;
             int isPress = sampleN <= 3;
             int isMove = (!isPress) && (touch != 0) && (moveLines < 12) && (sampleN % 6 == 0);
@@ -99,13 +106,9 @@ static void receiveEvent(void *,void *,void *,InputEvent event) {
                 if (isMove) ++moveLines;
             }
             if (isRelease) {
-                printf("INPUT_SAMPLE_END n=%lu complete=1 released=1 moves=%lu\n", sampleN, moveLines);
-                fflush(stdout);
-                sampling = 0; sawRelease = 1;
+                sampleEnd("release", 1);
             } else if (sampleN >= 2000) {
-                printf("INPUT_SAMPLE_END n=%lu complete=0 released=0 moves=%lu\n", sampleN, moveLines);
-                fflush(stdout);
-                sampling = 0;
+                sampleEnd("cap", 0);
             }
         }
     }
@@ -286,6 +289,7 @@ static int monitor(unsigned seconds) {
     fflush(stdout);
     const auto until=CFAbsoluteTimeGetCurrent()+seconds;
     while(CFAbsoluteTimeGetCurrent()<until)CFRunLoopRunInMode(kCFRunLoopDefaultMode,0.25,false);
+    if (sampleActive) sampleEnd("window", 0);
     IOHIDEventSystemClientUnscheduleWithRunLoop(client,CFRunLoopGetCurrent(),kCFRunLoopDefaultMode);
     CFRelease(client);
     printf("INPUT_MONITOR done events=%u digitizers=%u\n",eventCount,digitizerCount);
