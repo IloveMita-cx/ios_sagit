@@ -267,6 +267,38 @@ static int hidTap(double x,double y,unsigned pressure) {
     IOHIDEventSystemClientUnscheduleWithRunLoop(client,CFRunLoopGetCurrent(),kCFRunLoopDefaultMode);
     CFRelease(client);IOObjectRelease(service);alarm(0);return ok?0:1;
 }
+static int hidSwipe(double x0,double y0,double x1,double y1,unsigned duration) {
+    for(double v:{x0,y0,x1,y1})if(!isfinite(v) || v<0 || v>1)return 2;
+    if(geteuid() || duration<80 || duration>1000)return 2;
+    alarm(5);mach_port_t iterator=0;
+    auto status=IOServiceGetMatchingServices(0,IOServiceMatching("SynapticsTouch"),&iterator);
+    if(status)return 1;
+    auto service=IOIteratorNext(iterator),extra=IOIteratorNext(iterator);IOObjectRelease(iterator);
+    if(!service || extra){if(service)IOObjectRelease(service);if(extra)IOObjectRelease(extra);return 1;}
+    auto number=[&](CFStringRef key) {
+        auto value=IORegistryEntryCreateCFProperty(service,key,nullptr,0);uint64_t n=0;
+        if(value && CFGetTypeID(value)==CFNumberGetTypeID())CFNumberGetValue((CFNumberRef)value,kCFNumberSInt64Type,&n);
+        if(value)CFRelease(value);return n;
+    };
+    const auto before=number(CFSTR("TouchDiagnosticPulses")),reports=number(CFSTR("TouchDiagnosticReports"));
+    TouchDiagnostic::Gesture gesture{1,uint16_t(lround(x0*32767)),uint16_t(lround(y0*32767)),
+        uint16_t(lround(x1*32767)),uint16_t(lround(y1*32767)),uint16_t(duration),65,8,8,0};
+    NSData *data=[NSData dataWithBytes:&gesture length:sizeof(gesture)];
+    const auto begin=mach_absolute_time();
+    status=IORegistryEntrySetCFProperties(service,(__bridge CFTypeRef)@{@"TouchDiagnosticSwipe":data});
+    bool released=false;
+    for(unsigned attempt=0;!status && attempt<160;++attempt) {
+        usleep(10000);
+        auto value=IORegistryEntryCreateCFProperty(service,CFSTR("TouchDiagnosticLastReleased"),nullptr,0);
+        released=value==kCFBooleanTrue;if(value)CFRelease(value);if(released)break;
+    }
+    const auto after=number(CFSTR("TouchDiagnosticPulses")),endReports=number(CFSTR("TouchDiagnosticReports"));
+    const bool ok=!status && released && after==before+1 && endReports>=reports+3;
+    printf("INPUT_HID_SWIPE physical_input=0 driver_report=1 from=%.6f,%.6f to=%.6f,%.6f duration_ms=%u status=0x%x released=%u reports=%llu begin=%llu end=%llu delivery_verified=%u ui_response_verified=0\n",
+        x0,y0,x1,y1,duration,status,released,(unsigned long long)(endReports-reports),
+        (unsigned long long)begin,(unsigned long long)mach_absolute_time(),ok);
+    IOObjectRelease(service);alarm(0);return ok?0:1;
+}
 static int monitor(unsigned seconds) {
     auto client=IOHIDEventSystemClientCreateWithType(kCFAllocatorDefault,1,nullptr);
     if(!client){fputs("INPUT_MONITOR create_failed\n",stderr);return 1;}
@@ -434,6 +466,14 @@ int main(int argc,const char *argv[]) {
         if(argc==3 && !strcmp(argv[1],"mkdir")) return makeDir(argv[2]);
         if(argc==4 && !strcmp(argv[1],"cp")) return copyFile(argv[2],argv[3]);
         if(argc==3 && !strcmp(argv[1],"raw-sample")) { char *e=nullptr; const auto s=strtoul(argv[2],&e,10); if(!*argv[2] || *e || !s || s>60) return 2; return rawSample((unsigned)s); }
+        if(argc==7 && !strcmp(argv[1],"swipe")) {
+            char *e0=nullptr,*e1=nullptr,*e2=nullptr,*e3=nullptr,*e4=nullptr;
+            const double x0=strtod(argv[2],&e0), y0=strtod(argv[3],&e1);
+            const double x1=strtod(argv[4],&e2), y1=strtod(argv[5],&e3);
+            const unsigned long ms=strtoul(argv[6],&e4,10);
+            if(*e0||*e1||*e2||*e3||*e4) return 2;
+            return hidSwipe(x0,y0,x1,y1,(unsigned)ms);
+        }
         if(argc==4 && !strcmp(argv[1],"tap")) {
             char *xEnd=nullptr,*yEnd=nullptr;const auto x=strtod(argv[2],&xEnd),y=strtod(argv[3],&yEnd);
             if(!*argv[2] || !*argv[3] || *xEnd || *yEnd)return 2;
