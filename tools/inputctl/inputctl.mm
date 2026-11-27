@@ -48,14 +48,24 @@ void IOHIDEventSystemClientDispatchEvent(InputEventClient,InputEvent);
 }
 static unsigned eventCount=0,digitizerCount=0;
 static bool compactEvents=false;
+// If the capture window closes while a gesture is still down, the sampler must
+// report an incomplete sample instead of silently ending.
+static void samplerEnd(int sig) {
+    (void)sig;
+    fprintf(stdout, "INPUT_SAMPLE_END complete=0 released=0 by=signal\n");
+    fflush(stdout);
+    _exit(0);
+}
 static void receiveEvent(void *,void *,void *,InputEvent event) {
     ++eventCount;
     const auto type=IOHIDEventGetType(event);
     if(type!=11) return;
     ++digitizerCount;
     {
-        static int sampling = 0;
-        static unsigned long sampleN = 0, sampleLines = 0;
+        static int sampling = 0, sawRelease = 0;
+        static unsigned long sampleN = 0, moveLines = 0;
+        static long long activeIdx = -1;
+        static unsigned long long activeSender = 0;
         auto kids = IOHIDEventGetChildren(event);
         long kidsTotal = kids ? (long)CFArrayGetCount(kids) : 0;
         long fingers = 0;
@@ -69,25 +79,31 @@ static void receiveEvent(void *,void *,void *,InputEvent event) {
         long long range = IOHIDEventGetIntegerValue(event, 720904);
         long long touch = IOHIDEventGetIntegerValue(event, 720905);
         long long idx = IOHIDEventGetIntegerValue(event, 720901);
+        unsigned long long sender = (unsigned long long)IOHIDEventGetSenderID(event);
         unsigned long long ts = IOHIDEventGetTimeStamp(event);
         double sx = IOHIDEventGetFloatValue(event, 720896);
         double sy = IOHIDEventGetFloatValue(event, 720897);
-        if (!sampling && touch == 1) { sampling = 1; sampleN = 0; sampleLines = 0; }
-        if (sampling) {
+        if (!sampling && touch == 1) {
+            sampling = 1; sawRelease = 0; sampleN = 0; moveLines = 0;
+            activeIdx = idx; activeSender = sender;
+        }
+        if (sampling && sender == activeSender && idx == activeIdx) {
             ++sampleN;
-            int keep = (sampleN <= 3) || (touch == 0) || (sampleN % 6 == 0) || (sampleLines >= 44);
-            if (keep) {
+            int isPress = sampleN <= 3;
+            int isMove = (!isPress) && (touch != 0) && (moveLines < 12) && (sampleN % 6 == 0);
+            int isRelease = (touch == 0);
+            if (isPress || isMove || isRelease) {
                 printf("INPUT_SAMPLE n=%lu idx=%lld type=%lld coll=%lld kids=%ld fingers=%ld mask=%lld range=%lld touch=%lld ts=%llu x=%.4f y=%.4f\n",
                        sampleN, idx, dtype, coll, kidsTotal, fingers, mask, range, touch, ts, sx, sy);
                 fflush(stdout);
-                ++sampleLines;
+                if (isMove) ++moveLines;
             }
-            if (touch == 0) {
-                printf("INPUT_SAMPLE_END n=%lu complete=1\n", sampleN);
+            if (isRelease) {
+                printf("INPUT_SAMPLE_END n=%lu complete=1 released=1 moves=%lu\n", sampleN, moveLines);
                 fflush(stdout);
-                sampling = 0;
-            } else if (sampleN >= 64) {
-                printf("INPUT_SAMPLE_END n=%lu complete=0\n", sampleN);
+                sampling = 0; sawRelease = 1;
+            } else if (sampleN >= 2000) {
+                printf("INPUT_SAMPLE_END n=%lu complete=0 released=0 moves=%lu\n", sampleN, moveLines);
                 fflush(stdout);
                 sampling = 0;
             }
@@ -404,6 +420,7 @@ static int copyFile(const char *src, const char *dst) {
     return 0;
 }
 int main(int argc,const char *argv[]) {
+    signal(SIGTERM, samplerEnd);
     @autoreleasepool {
         if(argc==2 && !strcmp(argv[1],"enable-assistive-touch"))return enableAssistiveTouch();
         if(argc==2 && !strcmp(argv[1],"system"))return systemState();
