@@ -53,17 +53,45 @@ static void receiveEvent(void *,void *,void *,InputEvent event) {
     const auto type=IOHIDEventGetType(event);
     if(type!=11) return;
     ++digitizerCount;
-    if (digitizerCount == 1) {
-        printf("INPUT_FIELDS");
-        for (int fi = 720896; fi <= 720928; ++fi) printf(" %d=%lld", fi, (long long)IOHIDEventGetIntegerValue(event, fi));
-        auto kids0 = IOHIDEventGetChildren(event);
-        if (kids0 && CFArrayGetCount(kids0)) {
-            auto kid = (InputEvent)CFArrayGetValueAtIndex(kids0, 0);
-            printf(" | KID");
-            for (int fi = 720896; fi <= 720928; ++fi) printf(" %d=%lld", fi, (long long)IOHIDEventGetIntegerValue(kid, fi));
+    {
+        static int sampling = 0;
+        static unsigned long sampleN = 0, sampleLines = 0;
+        auto kids = IOHIDEventGetChildren(event);
+        long kidsTotal = kids ? (long)CFArrayGetCount(kids) : 0;
+        long fingers = 0;
+        for (long i = 0; i < kidsTotal; ++i) {
+            auto kid = (InputEvent)CFArrayGetValueAtIndex(kids, i);
+            if (IOHIDEventGetType(kid) == 11 && IOHIDEventGetIntegerValue(kid, 720900) == 2) ++fingers;
         }
-        printf("\n");
-        fflush(stdout);
+        long long dtype = IOHIDEventGetIntegerValue(event, 720900);
+        long long coll = IOHIDEventGetIntegerValue(event, 720918);
+        long long mask = IOHIDEventGetIntegerValue(event, 720903);
+        long long range = IOHIDEventGetIntegerValue(event, 720904);
+        long long touch = IOHIDEventGetIntegerValue(event, 720905);
+        long long idx = IOHIDEventGetIntegerValue(event, 720901);
+        unsigned long long ts = IOHIDEventGetTimeStamp(event);
+        double sx = IOHIDEventGetFloatValue(event, 720896);
+        double sy = IOHIDEventGetFloatValue(event, 720897);
+        if (!sampling && touch == 1) { sampling = 1; sampleN = 0; sampleLines = 0; }
+        if (sampling) {
+            ++sampleN;
+            int keep = (sampleN <= 3) || (touch == 0) || (sampleN % 6 == 0) || (sampleLines >= 44);
+            if (keep) {
+                printf("INPUT_SAMPLE n=%lu idx=%lld type=%lld coll=%lld kids=%ld fingers=%ld mask=%lld range=%lld touch=%lld ts=%llu x=%.4f y=%.4f\n",
+                       sampleN, idx, dtype, coll, kidsTotal, fingers, mask, range, touch, ts, sx, sy);
+                fflush(stdout);
+                ++sampleLines;
+            }
+            if (touch == 0) {
+                printf("INPUT_SAMPLE_END n=%lu complete=1\n", sampleN);
+                fflush(stdout);
+                sampling = 0;
+            } else if (sampleN >= 64) {
+                printf("INPUT_SAMPLE_END n=%lu complete=0\n", sampleN);
+                fflush(stdout);
+                sampling = 0;
+            }
+        }
     }
     if(compactEvents && digitizerCount>96 && digitizerCount%128!=0)return;
     if(compactEvents) {
