@@ -608,10 +608,10 @@ func (n *nativeEditor) applyVolume(selector string, inputs []nativeSystemInput, 
 				if !resourceFork {
 					must(v.ReadFile(relative))
 				}
+				// The resource fork is left in place: removing it would also
+				// require clearing the inode resource-fork flag, and the stale
+				// data is harmless once the data fork is a plain file.
 				fs.put(nativeXattrKey(id, "com.apple.decmpfs"), nil)
-				if resourceFork {
-					fs.put(nativeXattrKey(id, "com.apple.ResourceFork"), nil)
-				}
 				np32(inode[68:], nu32(inode[68:])&^0x20)
 				np64(inode[48:], nu64(inode[48:])&^0x40000)
 				np64(inode[84:], 0)
