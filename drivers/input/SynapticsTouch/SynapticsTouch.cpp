@@ -141,7 +141,14 @@ void SynapticsTouch::sample() {
     fIRQ->disable();
     RMI4::Frame frame;
     if (fDelivery.releasing()) {
-        if (!fDelivery.send(frame,[this](const RMI4::Frame &value){return emit(value);})) {
+        // A sensor frame without contacts does not always mean the finger left:
+    // measured drags were split into ~25 ms down/up fragments. Bridge short
+    // empty gaps with the last accepted frame so UIKit sees one path.
+    unsigned active=0;for(const auto &contact:frame.contacts)active+=contact.active;
+    if(active){fEmptyFrames=0;fLastAccepted=frame;}
+    else if(fEmptyFrames<5){++fEmptyFrames;++fBridgedFrames;frame=fLastAccepted;setProperty("TouchBridgedFrames",fBridgedFrames,64);}
+    else ++fEmptyFrames;
+    if (!fDelivery.send(frame,[this](const RMI4::Frame &value){return emit(value);})) {
             fTimer->setTimeoutMS(20);return;
         }
         if (!fRunning) return;
@@ -174,6 +181,13 @@ void SynapticsTouch::sample() {
         fTimer->setTimeoutMS(1000);return;
     }
     fErrors=0;fRecoveries=0;setProperty("HIDInputOffline",false);setProperty("RMILastError",uint64_t(0),32);
+    // A sensor frame without contacts does not always mean the finger left:
+    // measured drags were split into ~25 ms down/up fragments. Bridge short
+    // empty gaps with the last accepted frame so UIKit sees one path.
+    unsigned active=0;for(const auto &contact:frame.contacts)active+=contact.active;
+    if(active){fEmptyFrames=0;fLastAccepted=frame;}
+    else if(fEmptyFrames<5){++fEmptyFrames;++fBridgedFrames;frame=fLastAccepted;setProperty("TouchBridgedFrames",fBridgedFrames,64);}
+    else ++fEmptyFrames;
     if (!fDelivery.send(frame,[this](const RMI4::Frame &value){return emit(value);})) {
         fTimer->setTimeoutMS(20);return;
     }
