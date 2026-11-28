@@ -175,11 +175,18 @@ void SynapticsTouch::sample() {
     }
     fErrors=0;fRecoveries=0;setProperty("HIDInputOffline",false);setProperty("RMILastError",uint64_t(0),32);
     // A sensor frame without contacts does not always mean the finger left:
-    // measured drags were split into ~25 ms down/up fragments. Bridge short
-    // empty gaps with the last accepted frame so UIKit sees one path.
+    // measured drags were split into down/up fragments ~17-26 ms apart, and the
+    // bottom-edge segment released before it ever moved. Bridge short empty
+    // gaps with the last accepted contact so one drag stays one path.
+    uint64_t nowTicks=0,nowNs=0;clock_get_uptime(&nowTicks);absolutetime_to_nanoseconds(nowTicks,&nowNs);
     unsigned active=0;for(const auto &contact:frame.contacts)active+=contact.active;
-    if(active){fEmptyFrames=0;fLastAccepted=frame;}
-    else if(fEmptyFrames<5){++fEmptyFrames;++fBridgedFrames;frame=fLastAccepted;setProperty("TouchBridgedFrames",fBridgedFrames,64);}
+    bool haveHeld=false;for(const auto &contact:fLastAccepted.contacts)haveHeld=haveHeld||contact.active;
+    if(active){fEmptyFrames=0;fLastAccepted=frame;fLastActiveNs=nowNs;}
+    else if(haveHeld && nowNs>fLastActiveNs && (nowNs-fLastActiveNs)<100000000ULL){
+        ++fEmptyFrames;++fBridgedFrames;frame=fLastAccepted;
+        setProperty("TouchBridgedFrames",fBridgedFrames,64);
+        setProperty("TouchLastBridgeMS",unsigned((nowNs-fLastActiveNs)/1000000),32);
+    }
     else ++fEmptyFrames;
     if (!fDelivery.send(frame,[this](const RMI4::Frame &value){return emit(value);})) {
         fTimer->setTimeoutMS(20);return;
