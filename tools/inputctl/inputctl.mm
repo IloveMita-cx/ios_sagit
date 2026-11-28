@@ -308,7 +308,7 @@ static int monitor(unsigned seconds) {
     IOHIDEventSystemClientScheduleWithRunLoop(client,CFRunLoopGetCurrent(),kCFRunLoopDefaultMode);
     auto services=IOHIDEventSystemClientCopyServices(client);
     const CFIndex count=services ? CFArrayGetCount(services) : 0;
-    printf("INPUT_MONITOR ready seconds=%u services=%ld\n",seconds,(long)count);
+    printf("INPUT_MONITOR ready seconds=%u uptime=%.3f services=%ld\n",seconds,NSProcessInfo.processInfo.systemUptime,(long)count);
     NSArray *keys=@[@"Product",@"Transport",@"Built-In",@"PrimaryUsagePage",@"PrimaryUsage",
         @"DeviceUsagePairs",@"DisplayIntegrated",@"DigitizerCollectionDispatch",@"DisplayUUID",@"HIDServiceSupport"];
     for(CFIndex i=0;i<count;++i){
@@ -520,6 +520,15 @@ int main(int argc,const char *argv[]) {
                 for(NSString *key in keys) {
                     CFTypeRef value=IORegistryEntryCreateCFProperty(service,(__bridge CFStringRef)key,nullptr,0);
                     if(value) {printf("  %s=%s\n",key.UTF8String,[(__bridge id)value description].UTF8String);CFRelease(value);}
+                }
+
+                if(!strcmp(name,"SynapticsTouch")) {
+                    const char *extra[]={"TouchBridgedFrames","TouchLastBridgeMS","TouchDownTransitions","TouchUpTransitions","TouchActiveFrames","TouchInputReports","RMILastError"};
+                    for(const char *ekey:extra) {
+                        CFTypeRef value=IORegistryEntryCreateCFProperty(service,(__bridge CFStringRef)[NSString stringWithUTF8String:ekey],nullptr,0);
+                        if(value) {printf("  %s=%s\n",ekey,[(__bridge id)value description].UTF8String);CFRelease(value);}
+                        else printf("  %s=missing\n",ekey);
+                    }
                 }
                 // A full ten-contact element tree can occupy the UART for
                 // minutes. Keep routine captures bounded; request it explicitly.
