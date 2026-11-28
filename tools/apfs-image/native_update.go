@@ -581,14 +581,14 @@ func (n *nativeEditor) applyVolume(selector string, inputs []nativeSystemInput, 
 		var inode []byte
 		if err == nil {
 			repairCheck(target.Inode.Flags&2 == 0, "System overlay target has unsupported directory statistics")
-			repairCheck(must(target.FileMode())&0170000 == 0100000 && must(target.OwnerIdentifier()) == input.uid && must(target.GroupIdentifier()) == input.gid, "target is not a regular file with the expected ownership: "+relative)
+			repairCheck(must(target.FileMode())&0170000 == 0100000, "target is not a regular file: "+relative)
 			id = must(target.Identifier())
 			inode = fs.required(nativeKey(id, 3))
 			if selector == "data" {
 				np16(inode[80:], uint16(0100000|stMode.Perm()))
 			}
 			repairCheck(nu32(inode[56:]) == 1 && nu64(inode[8:]) == id, "hardlinked/shared target unsupported: "+relative)
-			repairCheck(!must(target.HasExtendedAttributeByName("com.apple.ResourceFork")), "resource-fork replacement unsupported")
+			resourceFork := must(target.HasExtendedAttributeByName("com.apple.ResourceFork"))
 			stream := must(target.RawDataStream())
 			if input.patch != nil {
 				changed := n.patchSystemStream(fs, ext, target, inode, relative, input.patch)
@@ -602,9 +602,16 @@ func (n *nativeEditor) applyVolume(selector string, inputs []nativeSystemInput, 
 				attribute := must(target.ExtendedAttributeByName("com.apple.decmpfs"))
 				a := attribute.AttributeValues
 				repairCheck(a.Flags == 2 && len(a.ValueData) >= 16 && nu32(a.ValueData) == 0x636d7066 && stream.Size() == 0 && len(stream.PhysicalExtents) == 0, "only inline compression with an empty raw stream is supported")
-				// A successful logical read verifies the original compression header.
-				must(v.ReadFile(relative))
+				// Inline-compressed targets are verified by a logical read. A
+				// resource-fork compressed target has no inline payload; its
+				// resource fork is dropped below so the file becomes plain.
+				if !resourceFork {
+					must(v.ReadFile(relative))
+				}
 				fs.put(nativeXattrKey(id, "com.apple.decmpfs"), nil)
+				if resourceFork {
+					fs.put(nativeXattrKey(id, "com.apple.ResourceFork"), nil)
+				}
 				np32(inode[68:], nu32(inode[68:])&^0x20)
 				np64(inode[48:], nu64(inode[48:])&^0x40000)
 				np64(inode[84:], 0)
