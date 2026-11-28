@@ -35,7 +35,8 @@ class SynapticsTouch : public IOHIDDevice {
     bool fDiagnosticEnabled=false,fDiagnosticActive=false,fDiagnosticTimerAdded=false;
     uint64_t fDiagnosticPulses=0,fDiagnosticReports=0;
     TouchDiagnostic::Stroke fDiagnosticStroke;
-    unsigned fErrors=0,fRecoveries=0,fLastContacts=0;
+    unsigned fErrors=0,fRecoveries=0,fLastContacts=0,fEmptyFrames=0,fBridgedFrames=0;
+    RMI4::Frame fLastAccepted;
     uint64_t fInputReports=0;
     uint64_t fActiveFrames=0,fDownTransitions=0,fUpTransitions=0;
     uint16_t fMaxX=0,fMaxY=0;
